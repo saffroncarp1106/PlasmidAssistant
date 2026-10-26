@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from Bio import SeqIO
-from review_ui import App
+from main import App
 from test_engine import record
 
 
@@ -26,7 +26,7 @@ class ReviewTests(unittest.TestCase):
         app.on_select()
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / 'result.gb'
-            with patch('review_ui.filedialog.asksaveasfilename', return_value=str(target)), patch('review_ui.messagebox.showinfo'), patch('review_ui.messagebox.showerror') as error:
+            with patch('main.filedialog.asksaveasfilename', return_value=str(target)), patch('main.messagebox.showinfo'), patch('main.messagebox.showerror') as error:
                 app.export()
                 error.assert_not_called()
                 output = SeqIO.read(target, 'genbank')

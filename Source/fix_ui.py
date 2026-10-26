@@ -1,5 +1,5 @@
 from pathlib import Path
-p = Path(__file__).with_name('review_ui.py')
+p = Path(__file__).with_name('main.py')
 text = p.read_text()
 text = text.replace('self.chk_circular = ttk.Checkbutton', 'self.circular = tk.BooleanVar()\n        self.chk_circular = ttk.Checkbutton').replace('variable=tk.IntVar()', 'variable=self.circular')
 text = text.replace('self.tree.bind("<<TreeviewSelect>>", self.on_select)', 'ttk.Button(control_frame, text="Toggle selected", command=self.on_select).grid(row=1, column=0)')

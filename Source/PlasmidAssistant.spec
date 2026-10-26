@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['review_ui.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
     datas=[],
