@@ -1,0 +1,20 @@
+### Audit Report
+
+**What Passed (Verified Behaviors)**
+*   **Unit Test Suite:** All 52 internal unit tests executed successfully (`exit_code: 0`).
+*   **Sequence Matching Logic:** The system correctly identifies candidate sequences (e.g., mRFP1) and calculates identity/coverage metrics against known references.
+*   **Feature Classification:** The engine distinguishes between "exact," "variant," and "gapped_variant" matches, assigning appropriate confidence levels (High/Moderate/Weak).
+*   **Round-trip Integrity:** Native file parsing preserves existing features; round-trip conversion of source files maintains feature counts and locations.
+*   **Recovery Capability:** The system can recover specific removed origins from a frozen executable state.
+*   **Negative Control Handling:** Synthetic negative controls (synthetic sequences) are processed without triggering automatic calls or false positives in the test environment.
+
+**What Failed (Missing or Negative Results)**
+*   *No functional failures were reported.* All commands returned `exit_code: 0`.
+*   However, specific biological validations did not occur due to explicit limitations noted in the logs (e.g., no GUI compatibility checks, no independent OS benchmarking).
+
+**What They Do NOT Prove**
+*   **Biological Accuracy:** The results do not prove that identified matches are biologically correct; they only prove the algorithm's ability to calculate similarity scores against provided references.
+*   **GUI Functionality:** There is no evidence of compatibility or functionality within the SnapGene Graphical User Interface.
+*   **Independent Benchmarking:** The "frozen executable" and "native parser" checks are smoke tests on the same machine, not independent benchmarks against external standards.
+*   **Real-world Specificity:** Synthetic negative controls do not validate performance on real biological samples or complex genomic contexts.
+*   **OS Environment Robustness:** Delivery checks were performed with an empty PATH, meaning they do not prove reliability in a clean or standard operating system environment.

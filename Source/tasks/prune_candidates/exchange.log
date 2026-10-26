@@ -1,0 +1,16 @@
+Python function prune_candidates(hits) source only. sorted hits descending by (h['coverage'],h['identity']). For each hit keep unless already kept same entry.feature_id, same location.strand, and overlap occupied sets divided by min size >=.8. Avoid emptysetdivision. Circular locations use set(location). Return kept. No other behavior. Under25lines.
+RESPONSE
+```python
+def prune_candidates(hits):
+    hits = sorted(hits, key=lambda h: (h['coverage'], h['identity']), reverse=True)
+    kept = []
+    seen = set()
+    for h in hits:
+        loc = tuple(sorted(set(h['location']))) if isinstance(h['location'], list) else h['location']
+        strand = h.get('strand', 'both')
+        key = (h['feature_id'], loc, strand)
+        if key not in seen:
+            kept.append(h)
+            seen.add(key)
+    return kept
+```

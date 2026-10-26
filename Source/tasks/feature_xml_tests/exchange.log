@@ -1,0 +1,57 @@
+Return JSON code/report. Write unittest test_feature_xml.py for from feature_xml import feature_xml. Tests only. Do NOT implement feature_xml. Test reverse CompoundLocation parts [SimpleLocation(0,8,strand=-1),SimpleLocation(110,120,strand=-1)] using SeqFeature(type='misc_feature',qualifiers={'label':['test'],'note':['one','two']}). Call feature_xml(f,7,120). Assert directionality2, id7, XML Segment range list equals ['111-120','1-8']; find Q[@name='note']/V list .get('text') equals ['one','two']; label V text test. Test forward SimpleLocation(20,30,strand=1) gives range21-30. Test fuzzy BeforePosition(20) and out-of-range end121 and missing strand raise ValueError. Use real Biopython SeqFeature. Under75 lines. Main guard unittest.main().
+RESPONSE
+```python
+from unittest import TestCase
+from Bio.SeqFeature import SeqFeature, SimpleLocation, BeforePosition
+from feature_xml import feature_xml
+
+class TestFeatureXML(TestCase):
+    def test_reverse_compound_location(self):
+        loc = SimpleLocation(0, 8, strand=-1)
+        loc2 = SimpleLocation(110, 120, strand=-1)
+        f = SeqFeature(type='misc_feature', qualifiers={'label': ['test'], 'note': ['one', 'two']})
+        f.location = [loc, loc2]
+        
+        result = feature_xml(f, 7, 120)
+        
+        self.assertEqual(result['directionality2'], True)
+        self.assertEqual(result['id7'], 7)
+        self.assertEqual(result['XML_Segment_range_list'], ['111-120', '1-8'])
+        
+        notes = result['Q']['@name']['note']
+        texts = [v.get('text') for v in notes]
+        self.assertEqual(texts, ['one', 'two'])
+        
+        label_text = result['label']['V']['text']
+        self.assertEqual(label_text, 'test')
+
+    def test_forward_simple_location(self):
+        loc = SimpleLocation(20, 30, strand=1)
+        f = SeqFeature(type='misc_feature', qualifiers={})
+        f.location = loc
+        
+        result = feature_xml(f, 7, 120)
+        
+        # Assuming directionality logic holds for forward strand
+        self.assertEqual(result['XML_Segment_range_list'][0], '21-30')
+
+    def test_fuzzy_exceptions(self):
+        # Test BeforePosition with missing strand
+        loc = BeforePosition(20)
+        f = SeqFeature(type='misc_feature', qualifiers={})
+        f.location = loc
+        
+        with self.assertRaises(ValueError):
+            feature_xml(f, 7, 120)
+
+        # Test out-of-range end
+        loc2 = SimpleLocation(20, 121, strand=1)
+        f2 = SeqFeature(type='misc_feature', qualifiers={})
+        f2.location = loc2
+        
+        with self.assertRaises(ValueError):
+            feature_xml(f2, 7, 120)
+
+if __name__ == '__main__':
+    unittest.main()
+```

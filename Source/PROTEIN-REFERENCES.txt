@@ -1,0 +1,18 @@
+Public reference attribution
+
+protein_features.json contains seven protein reference sequences from UniProtKB:
+P03962, P34233, P04173, P06633, P00912, P21264 and Q5A5Q6.
+UniProt Consortium, https://www.uniprot.org/
+UniProt data are distributed under Creative Commons Attribution 4.0:
+https://www.uniprot.org/help/license
+https://creativecommons.org/licenses/by/4.0/
+Retrieved 2026-10-24. This companion converts FASTA records into JSON reference
+entries with names, source URLs and sequence hashes. It is not endorsed by UniProt.
+
+mRFP1 protein reference: NCBI GenPept CAH64892.1
+https://www.ncbi.nlm.nih.gov/protein/CAH64892.1
+NCBI database/distribution policies: https://www.ncbi.nlm.nih.gov/home/about/policies/
+
+Reference identity supports a similarity-based annotation, not a probability or
+proof of organism of origin. Protein candidates use standard genetic code 1.
+The downloaded bulk discovery datasets and user plasmids are NOT distributed.

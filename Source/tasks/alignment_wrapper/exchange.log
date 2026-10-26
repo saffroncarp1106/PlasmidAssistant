@@ -1,0 +1,80 @@
+Write readable Python source only with no semicolons. Implement alignment_candidates(record,entries,fast_hits,minimum_identity=.8,minimum_coverage=.5,max_windows=20). Import Bio.Seq.Seq,local_alignment.align_best,seed_windows.seed_windows and import matching.location INSIDE function as from matching import location. Use sequence uppercase, n=len(sequence), scan=sequence*2 for circular else sequence. For each entry use entry['sequence']; skip length<60. For strand +1 use reference, for -1 use reverse complement. For each window from seed_windows(scan,query,n,max_windows), align_best(scan[left:right],query). Skip None. start=left+evidence['start'];length=evidence['end']-evidence['start']. Require start<n and 0<length<=n, identity>=minimum_identity, coverage>=minimum_coverage. loc=location(start,length,n,strand). Suppress if any fast hit has same canonical_name casefold, same strand and intersection/min(lengths)>=.8. Dedup by feature_id,strand,str(loc) in set. Append hit dict entry,location,identity,coverage,match partial if coverage<.95 else gapped_variant,confidence Moderate confidence if identity>=.95 and coverage>=.8 else Weak evidence,status new,method seeded_local_alignment,reference_start and reference_end from evidence. Return list. No high confidence results. Use real hit schema fast_hits each has entry and location. No guessed APIs, no code beyond function/imports. Document heuristic and max_windows limitation. Under90 lines.
+RESPONSE
+def alignment_candidates(record, entries, fast_hits, minimum_identity=0.8, minimum_coverage=0.5, max_windows=20):
+    """
+    Heuristic: Seeds circular scan windows, aligns best local hits, filters by identity/coverage,
+    suppresses redundant fast hits (same name/strand with high overlap), and deduplicates by feature_id.
+    Limitation: max_windows caps seed search depth for performance; results are partial if coverage < 0.95.
+    """
+    from Bio.Seq import Seq
+    from matching.location import location
+
+    sequence = record['sequence'].upper()
+    n = len(sequence)
+    scan = sequence * 2 if record.get('circular', False) else sequence
+
+    results = []
+    seen = set()
+
+    for entry in entries:
+        query_seq = entry['sequence']
+        if len(query_seq) < 60:
+            continue
+
+        strand = entry.get('strand', 1)
+        if strand == -1:
+            query_seq = query_seq.reverse_complement().upper()
+            strand = -1
+        else:
+            query_seq = query_seq.upper()
+
+        for window in seed_windows(scan, query_seq, n, max_windows):
+            left, right = window
+            evidence = align_best(scan[left:right], query_seq)
+            if not evidence:
+                continue
+
+            start = left + evidence['start']
+            length = evidence['end'] - evidence['start']
+
+            if not (0 < start < n and 0 < length <= n):
+                continue
+
+            identity = evidence.get('identity', 0)
+            coverage = evidence.get('coverage', 0)
+
+            if identity < minimum_identity or coverage < minimum_coverage:
+                continue
+
+            loc = location(start, length, n, strand)
+
+            # Suppress if fast hit matches canonical name, strand, and has >=80% overlap
+            for fh in fast_hits:
+                if fh['entry'].get('canonical_name', '').casefold() == entry.get('canonical_name', '').casefold():
+                    if fh['location'].strand == strand:
+                        overlap = min(length, fh['location'].length) / max(length, fh['location'].length)
+                        if overlap >= 0.8:
+                            break
+
+            key = (entry.get('feature_id'), strand, loc.str)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            status = 'new'
+            match_type = 'gapped_variant' if coverage >= 0.95 else 'partial'
+            confidence = 'Moderate confidence' if identity >= 0.95 and coverage >= 0.8 else 'Weak evidence'
+
+            results.append({
+                'location': loc,
+                'identity': identity,
+                'coverage': coverage,
+                'match': match_type,
+                'confidence': confidence,
+                'status': status,
+                'method': 'seeded_local_alignment',
+                'reference_start': start,
+                'reference_end': start + length
+            })
+
+    return results

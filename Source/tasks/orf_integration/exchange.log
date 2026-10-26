@@ -1,0 +1,43 @@
+Write readable Python source only. Implement detect_orfs(sequence,circular=False,minimum=300). Import Bio.Seq.Seq,Bio.SeqFeature.SeqFeature,orf_spans.complete_orf_spans,matching.location. sequence=str(sequence).upper(). n=len(sequence). For strand and oriented in [(1,sequence),(-1,str(Seq(sequence).reverse_complement()))], iterate complete_orf_spans(oriented,circular,minimum). forward=start if strand1 else (n-start-length)%n. loc=location(forward,length,n,strand). Append SeqFeature(loc,type='misc_feature',qualifiers={'label':['Unknown ORF'],'note':['Complete ATG-to-stop ORF; identity unknown; not evidence of expression.'],'inference':['ab initio prediction:plasmid-assistant']}). Return list. Under30lines. No IO. Use from matching import location, not matching.location module. This replaces quadratic scanning and must preserve circular/reverse coordinates.
+FILE orf_spans.py
+def complete_orf_spans(sequence, circular=False, minimum=300):
+    if minimum < 6: raise ValueError("minimum must be >= 6")
+    seq = str(sequence).upper()
+    n = len(seq)
+    scan = seq * 2 if circular else seq
+    stops = {"TAA", "TAG", "TGA"}
+    starts = ["ATG"]
+    result = []
+    for frame in range(3):
+        positions = range(frame, len(scan) - 2, 3)
+        next_stop = None
+        for pos in reversed(positions):
+            codon = scan[pos:pos+3]
+            if set(codon) - set('ACGT'):
+                next_stop = None
+                continue
+            if codon in stops:
+                next_stop = pos
+            elif codon == starts[0] and pos < n and next_stop is not None:
+                length = next_stop + 3 - pos
+                if length >= minimum and (not circular or length <= n):
+                    result.append((pos, length))
+    return sorted(result)
+
+RESPONSE
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature
+from matching import location
+
+def detect_orfs(sequence, circular=False, minimum=300):
+    sequence = str(sequence).upper()
+    n = len(sequence)
+    strands = [(1, sequence), (-1, str(Seq(sequence).reverse_complement()))]
+    results = []
+    for strand, oriented in strands:
+        orf_spans = complete_orf_spans(oriented, circular, minimum)
+        for start, length in orf_spans:
+            forward = start if strand == 1 else (n - start - length) % n
+            loc = location(forward, length, n, strand)
+            results.append(SeqFeature(loc, type='misc_feature', qualifiers={'label': ['Unknown ORF'], 'note': ['Complete ATG-to-stop ORF; identity unknown; not evidence of expression.'], 'inference': ['ab initio prediction:plasmid-assistant']}))
+    return results

@@ -1,0 +1,17 @@
+### Audit Report
+
+**What Passed (Verified Behaviors)**
+*   **Unit Test Suite:** All 35 internal unit tests executed successfully (`exit_code: 0`, status "OK").
+*   **Native Roundtrip Logic:** The `check_native_real.py` script confirmed that data can be written and read back correctly on the local machine without loss of existing features (12 features preserved).
+*   **Feature Expansion Capability:** The `check_candidate.py` script demonstrated the ability to generate additional features (increasing from 12 original to 234 output) during processing.
+*   **Corpus Parsing:** The `check_native_corpus.py` script successfully parsed and round-tripped 30 documents using the native parser.
+*   **Relocation Logic:** The `check_relocated.py` script confirmed that feature counts remain consistent (12 original → 234 output) even when simulating a relocated environment with an empty PATH.
+
+**What Failed / Did Not Pass**
+*   **No Failures Detected:** All provided commands returned `exit_code: 0`. There are no explicit failures in the provided logs.
+
+**What They Do NOT Prove (Limitations)**
+*   **GUI Compatibility:** The results do not prove functionality within the SnapGene GUI environment; all tests appear to be command-line or script-based.
+*   **Biological Accuracy:** The tests verify data integrity (roundtrips) and feature counting, but they do not validate the biological correctness of the generated annotations or sequences.
+*   **Cross-Platform Reliability:** The `check_relocated.py` test explicitly notes it is a "same-machine smoke check" with an empty PATH, meaning it does not prove robustness across different operating systems or clean installation environments.
+*   **External Dependency Integrity:** Passing unit tests only confirms internal logic consistency; they do not verify that external dependencies (e.g., specific database versions, network services) are functioning correctly in a production context.

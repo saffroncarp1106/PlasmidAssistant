@@ -1,0 +1,207 @@
+[
+  {
+    "path": "Plasmids\\Gateway Donor Vectors\\pDONR P4-P1r.dna",
+    "unexpected": [
+      {
+        "name": "T7 promoter",
+        "location": "[3018:3037](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TA Cloning Vectors\\pDrive (linearized).dna",
+    "unexpected": [
+      {
+        "name": "f1 ori",
+        "location": "[299:728](-)",
+        "closest": [
+          {
+            "location": "[272:728](-)",
+            "overlap": 0.9407894736842105
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO Directional Vectors\\pcDNA3.1D V5-His-TOPO.dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2466:2497](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\Gateway Donor Vectors\\pDONR Zeo.dna",
+    "unexpected": [
+      {
+        "name": "T7 promoter",
+        "location": "[3003:3022](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TA Cloning Vectors\\pET SUMO (linearized).dna",
+    "unexpected": [
+      {
+        "name": "f1 ori",
+        "location": "[230:659](+)",
+        "closest": [
+          {
+            "location": "[230:686](+)",
+            "overlap": 0.9407894736842105
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO Blunt Vectors\\pCR4Blunt-TOPO (linearized).dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[3804:3835](+)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO Directional Vectors\\pcDNA3.2 V5 GW D-TOPO.dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2467:2498](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO TA Vectors\\pBlue-TOPO (linearized).dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[5567:5598](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TA Cloning Vectors\\pETBlue-1 AccepTor.dna",
+    "unexpected": [
+      {
+        "name": "f1 ori",
+        "location": "[641:1070](+)",
+        "closest": [
+          {
+            "location": "[641:1097](+)",
+            "overlap": 0.9407894736842105
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO Directional Vectors\\pcDNA6.2 cGeneBLAzer-GW D-TOPO.dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2834:2865](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO TA Vectors\\pcDNA3.1 CT-GFP-TOPO (linearized).dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[3094:3125](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TA Cloning Vectors\\pGEM-T (linearized).dna",
+    "unexpected": [
+      {
+        "name": "f1 ori",
+        "location": "[2341:2770](-)",
+        "closest": [
+          {
+            "location": "[2314:2770](-)",
+            "overlap": 0.9407894736842105
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO Directional Vectors\\pcDNA6.2 V5 GW D-TOPO.dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2100:2131](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO TA Vectors\\pcDNA3.1 NT-GFP-TOPO (linearized).dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2376:2407](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\Gateway Donor Vectors\\pDONR221 P1-P4.dna",
+    "unexpected": [
+      {
+        "name": "T7 promoter",
+        "location": "[3015:3034](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TA Cloning Vectors\\pGEM-T Easy (linearized).dna",
+    "unexpected": [
+      {
+        "name": "f1 ori",
+        "location": "[2347:2776](-)",
+        "closest": [
+          {
+            "location": "[2320:2776](-)",
+            "overlap": 0.9407894736842105
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO Directional Vectors\\pEF5 FRT V5-D-TOPO.dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2101:2132](-)",
+        "closest": []
+      }
+    ]
+  },
+  {
+    "path": "Plasmids\\TOPO TA Vectors\\pcDNA3.1 V5-His-TOPO (linearized).dna",
+    "unexpected": [
+      {
+        "name": "lac promoter",
+        "location": "[2460:2491](-)",
+        "closest": []
+      }
+    ]
+  }
+]

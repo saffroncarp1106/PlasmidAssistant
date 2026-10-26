@@ -1,0 +1,112 @@
+Return complete revised readable Python file only. Fix arbitrary boundary selection: tie suppression is allowed ONLY when scores equal, same_name true AND bases[i]==bases[j], then lexical feature_id tie break as before. In conflict loop equal scores should conflict when names differ OR occupied bases differ (even same name). All other behavior unchanged. Do not redesign. This prevents arbitrary database IDs choosing between different feature boundaries. Add a short comment explaining boundary ambiguity. Source only.
+FILE resolver.py
+"""Conservative resolution of overlapping reference matches."""
+def resolve_hits(hits):
+    bases = [set(h['location']) for h in hits]
+    scores = [(h['identity'], h['coverage']) for h in hits]
+
+    def competing(i, j):
+        if i == j or hits[i]['location'].strand != hits[j]['location'].strand:
+            return False
+        overlap = len(bases[i] & bases[j])
+        return bool(bases[i] and bases[j]) and overlap / len(bases[i]) >= .8 and overlap / len(bases[j]) >= .8
+
+    for i, hit in enumerate(hits):
+        if hit['status'] == 'existing':
+            continue
+        for j, other in enumerate(hits):
+            if not competing(i, j):
+                continue
+            same_name = hit['entry']['canonical_name'].casefold() == other['entry']['canonical_name'].casefold()
+            duplicate_existing = other['status'] == 'existing' and bases[i] == bases[j]
+            better = scores[j] > scores[i]
+            tie = scores[j] == scores[i] and same_name and other['entry']['feature_id'] < hit['entry']['feature_id']
+            if duplicate_existing or better or tie:
+                hit['status'] = 'superseded'
+                hit['confidence'] = 'Moderate confidence'
+                break
+    for i, hit in enumerate(hits):
+        if hit['status'] in ('existing', 'superseded'):
+            continue
+        for j, other in enumerate(hits):
+            if other['status'] in ('existing', 'superseded') or not competing(i, j):
+                continue
+            if scores[i] == scores[j] and hit['entry']['canonical_name'].casefold() != other['entry']['canonical_name'].casefold():
+                hit['status'] = 'conflict'
+                hit['confidence'] = 'Moderate confidence'
+    return hits
+
+RESPONSE
+```python
+"""Conservative resolution of overlapping reference matches.
+
+Boundary Ambiguity Note:
+This resolver prevents arbitrary database IDs from choosing between different feature boundaries.
+Tie suppression is strictly allowed ONLY when:
+  1. Scores are exactly equal.
+  2. Canonical names match (case-insensitive).
+  3. The genomic bases/locations are identical (bases[i] == bases[j]).
+If these conditions are not met, even with equal scores and same name, differing boundaries 
+result in a 'conflict' status rather than suppression. This ensures that distinct biological 
+features (e.g., different transcripts or isoforms) are not incorrectly merged due to ID ordering.
+"""
+
+def resolve_hits(hits):
+    # Precompute sets of bases for efficient overlap checking
+    bases = [set(h['location']) for h in hits]
+    scores = [(h['identity'], h['coverage']) for h in hits]
+
+    def competing(i, j):
+        """Check if two hits are sufficiently overlapping to be considered competitors."""
+        if i == j or hits[i]['location'].strand != hits[j]['location'].strand:
+            return False
+        overlap = len(bases[i] & bases[j])
+        # Ensure both have content and significant overlap ratio
+        return bool(bases[i] and bases[j]) and (overlap / len(bases[i]) >= .8) and (overlap / len(bases[j]) >= .8)
+
+    # First pass: Handle suppression of duplicates or inferior matches
+    for i, hit in enumerate(hits):
+        if hit['status'] == 'existing':
+            continue
+        for j, other in enumerate(hits):
+            if not competing(i, j):
+                continue
+            
+            same_name = hit['entry']['canonical_name'].casefold() == other['entry']['canonical_name'].casefold()
+            
+            # Check if the existing match has identical bases (exact duplicate location)
+            duplicate_existing = other['status'] == 'existing' and bases[i] == bases[j]
+            
+            # Determine if the other hit is strictly better in score
+            better = scores[j] > scores[i]
+            
+            # Tie-breaking logic: 
+            # Only suppress if scores are equal, names match, AND bases are identical.
+            # The feature_id tie-breaker applies only under these strict conditions.
+            tie = (scores[j] == scores[i]) and same_name and (bases[i] == bases[j]) and (other['entry']['feature_id'] < hit['entry']['feature_id'])
+            
+            if duplicate_existing or better or tie:
+                hit['status'] = 'superseded'
+                hit['confidence'] = 'Moderate confidence'
+                break
+
+    # Second pass: Handle conflicts where boundaries differ despite equal scores/same name
+    for i, hit in enumerate(hits):
+        if hit['status'] in ('existing', 'superseded'):
+            continue
+        for j, other in enumerate(hits):
+            if other['status'] in ('existing', 'superseded') or not competing(i, j):
+                continue
+            
+            # Conflict condition: Equal scores but DIFFERENT names OR DIFFERENT bases (boundaries)
+            # Even if names are the same, if bases differ, it is a conflict.
+            if scores[i] == scores[j]:
+                name_differs = hit['entry']['canonical_name'].casefold() != other['entry']['canonical_name'].casefold()
+                bases_differ = bases[i] != bases[j]
+                
+                if name_differs or bases_differ:
+                    hit['status'] = 'conflict'
+                    hit['confidence'] = 'Moderate confidence'
+                    
+    return hits
+```

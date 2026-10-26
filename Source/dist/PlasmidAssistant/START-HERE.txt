@@ -1,0 +1,26 @@
+Plasmid Assistant - early portable prototype
+
+Keep this entire folder together, including _internal and local_features.json.
+Double-click PlasmidAssistant.exe. No separate Python or Ollama installation is
+needed by this executable. You can place the folder in your SnapGene installation
+or another location. Delete this folder to remove the assistant.
+
+1. Open sequence: choose SnapGene .dna, GenBank, or FASTA.
+2. Analyze: processing can pause the window while matching runs.
+3. Highlight candidate rows and click Toggle selected to accept or reject them.
+   Existing annotations remain preserved. Unknown ORFs start unselected.
+4. Export to a NEW .gb file, then open that file in SnapGene.
+
+The assistant does not modify SnapGene or overwrite original sequence files.
+SnapGene-specific display settings, history, and other proprietary document
+metadata are not carried into GenBank. Export is GenBank only.
+
+Current limits: small local reference set; exact and full-length substitution
+matching only; no partial or insertion/deletion alignment; heuristic confidence;
+no independently validated real-plasmid accuracy benchmark. The local database
+was extracted from this installation: do not assume redistribution rights.
+
+Verified here: executable launches, real .dna imports, sequence and 12 existing
+annotations round-trip, one removed origin is recovered, source file unchanged.
+That recovery used a reference-source construct, not an independent benchmark.
+Clean Windows machine without Python testing remains pending.

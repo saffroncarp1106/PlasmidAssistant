@@ -1,0 +1,152 @@
+{
+  "path": "C:\\Users\\llkin\\Documents\\plasmid example.dna",
+  "sha256": "729eb8ba30e1df1a8df53289f4f5022bb19b4a64d6413d41feb8b1d1da1e57ac",
+  "bases": 6550,
+  "same_sequence": false,
+  "features": [
+    {
+      "type": "CDS",
+      "location": "join{[2186:2255](-), [1394:2186](-)}",
+      "qualifiers": {
+        "parts": [
+          "1:signal sequence"
+        ],
+        "codon_start": [
+          1
+        ],
+        "gene": [
+          "bla"
+        ],
+        "note": [
+          "confers resistance to ampicillin, carbenicillin, and related antibiotics"
+        ],
+        "product": [
+          "\u03b2-lactamase"
+        ],
+        "transl_table": [
+          1
+        ],
+        "translation": [
+          "MSIQHFRVALIPFFAAFCLPVFA,HPETLVKVKDAEDQLGARVGYIELDLNSGKILESFRPEERFPMMSTFKVLLCGAVLSRIDAGQEQLGRRIHYSQNDLVEYSPVTEKHLTDGMTVRELCSAAITMSDNTAANLLLTTIGGPKELTAFLHNMGDHVTRLDRWEPELNEAIPNDERDTTMPVAMATTLRKLLTGELLTLASRQQLIDWMEADKVAGPLLRSALPAGWFIADKSGAGERGSRGIIAALGPDGKPSRIVVIYTTGSQATMDERNRQIAEIGASLIKHW*"
+        ],
+        "label": [
+          "AmpR"
+        ]
+      }
+    },
+    {
+      "type": "CDS",
+      "location": "[5511:6315](-)",
+      "qualifiers": {
+        "codon_start": [
+          1
+        ],
+        "gene": [
+          "S. cerevisiae URA3"
+        ],
+        "note": [
+          "yeast auxotrophic marker, counterselectable with 5-fluoroorotic acid (5-FOA)"
+        ],
+        "product": [
+          "orotidine-5'-phosphate decarboxylase, required for uracil biosynthesis"
+        ],
+        "transl_table": [
+          1
+        ],
+        "translation": [
+          "MSKATYKERAATHPSPVAAKLFNIMHEKQTNLCASLDVRTTKELLELVEALGPKICLLKTHVDILTDFSMEGTVKPLKALSAKYNFLLFEDRKFADIGNTVKLQYSAGVYRIAEWADITNAHGVVGPGIVSGLKQAAEEVTKEPRGLLMLAELSCKGSLSTGEYTKGTVDIAKSDKDFVIGFIAQRDMGGRDEGYDWLIMTPGVGLDDKGDALGQQYRTVDDVVSTGSDIIIVGRGLFAKGRDAKVEGERYRKAGWEAYLRRCGQQN*"
+        ],
+        "label": [
+          "URA3"
+        ]
+      }
+    },
+    {
+      "type": "CDS",
+      "location": "[4105:4780](+)",
+      "qualifiers": {
+        "codon_start": [
+          1
+        ],
+        "note": [
+          ""
+        ],
+        "product": [
+          "monomeric derivative of DsRed (Campbell et al., 2002)"
+        ],
+        "transl_table": [
+          1
+        ],
+        "translation": [
+          "ASSEDVIKEFMRFKVRMEGSVNGHEFEIEGEGEGRPYEGTQTAKLKVTKGGPLPFAWDILSPQFQYGSKAYVKHPADIPDYLKLSFPEGFKWERVMNFEDGGVVTVTQDSSLQDGEFIYKVKLRGTNFPSDGPVMQKKTMGWEASTERMYPEDGALKGEIKMRLKLKDGGHYDAEVKTTYMAKKPVQLPGAYKTDIKLDITSHNEDYTIVEQYERAEGRHSTGA*"
+        ],
+        "label": [
+          "mRFP1"
+        ]
+      }
+    },
+    {
+      "type": "rep_origin",
+      "location": "[634:1223](-)",
+      "qualifiers": {
+        "direction": [
+          "LEFT"
+        ],
+        "note": [
+          "high-copy-number ColE1/pMB1/pBR322/pUC origin of replication"
+        ],
+        "label": [
+          "ori"
+        ]
+      }
+    },
+    {
+      "type": "terminator",
+      "location": "[5258:5511](+)",
+      "qualifiers": {
+        "note": [
+          "nopaline synthase terminator and poly(A) signal"
+        ],
+        "label": [
+          "NOS terminator"
+        ]
+      }
+    },
+    {
+      "type": "terminator",
+      "location": "[4780:5028](+)",
+      "qualifiers": {
+        "gene": [
+          "S. cerevisiae CYC1"
+        ],
+        "note": [
+          "transcription terminator for CYC1"
+        ],
+        "label": [
+          "CYC1 terminator"
+        ]
+      }
+    },
+    {
+      "type": "promoter",
+      "location": "[6315:6531](-)",
+      "qualifiers": {
+        "gene": [
+          "S. cerevisiae URA3"
+        ],
+        "label": [
+          "URA3 promoter"
+        ]
+      }
+    },
+    {
+      "type": "primer_bind",
+      "location": "[2017:2037](+)",
+      "qualifiers": {
+        "label": [
+          "Amp-R"
+        ]
+      }
+    }
+  ]
+}

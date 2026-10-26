@@ -1,0 +1,14 @@
+PAGE 1
+I  have  given  you  the  plasmid  sequence  and  I  have  revealed  the  largest  ORF  but  I  have  not  
+labeled
+ 
+it.
+ 
+You
+ must  label  this  ORF  and  identify  the  remaining  features  of  this  plasmid.  Promoters,  terminators,  
+open
+ reading  frames,  markers  (antibiotic  and  auxotrophic)  are  all  present.  There  are  a  total  of  7  
+features
+ 
+in
+ this  plasmid  including  the  one  that  I  have  revealed.   

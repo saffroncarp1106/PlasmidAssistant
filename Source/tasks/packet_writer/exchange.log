@@ -1,0 +1,70 @@
+Return JSON code/report. Implement only imports and functions parse_packets(data), append_features_bytes(original, features). Use Bio.SeqIO, io.BytesIO, struct, xml.etree.ElementTree and from feature_xml import feature_xml. parse_packets returns list(type,payload,raw), parsing one byte type plus big-endian 4-byte length with strict bounds checks ValueError on truncation, nonempty first packet type9 required. append_features_bytes: parse original record with SeqIO.read(BytesIO(original),'snapgene'); parse packets; reject >1 type10 packets; if features empty return original. If one type10, parse XML root and require tag Features; otherwise new Element('Features'). Find maximum numeric id across root.findall('Feature'), default -1. For each supplied Bio.SeqFeature call feature_xml(f,next_id,len(record)) and root.append. payload ET.tostring(root,encoding='utf-8'); replacement packet bytes([10])+struct.pack('>I',len(payload))+payload. Join original raw packets replacing type10, append replacement if none. Return resulting bytes. No hand-made DNA parser. No disk IO. Under70 lines. Do not add unrelated code.
+RESPONSE
+```python
+from Bio import SeqIO
+from io import BytesIO
+import struct
+import xml.etree.ElementTree as ET
+from feature_xml import feature_xml
+
+def parse_packets(data):
+    packets = []
+    idx = 0
+    if len(data) < 5:
+        raise ValueError("Truncation")
+    pkt_type = data[idx]
+    if pkt_type != 9:
+        raise ValueError("First packet type must be 9")
+    idx += 1
+    while idx + 4 <= len(data):
+        t, l = data[idx], struct.unpack('>I', data[idx+1:idx+5])[0]
+        idx += 5
+        if idx + l > len(data):
+            raise ValueError("Truncation")
+        packets.append((t, data[idx:idx+l], data[idx-l-4:idx]))
+        idx += l
+    return packets
+
+def append_features_bytes(original, features):
+    try:
+        record = SeqIO.read(BytesIO(original), 'snapgene')
+    except Exception:
+        return original
+    raw_packets = parse_packets(original)
+    if len(raw_packets) > 1 and raw_packets[0][0] == 10:
+        return original
+    if not features:
+        return original
+    root = ET.Element('Features')
+    max_id = -1
+    for f in root.findall('Feature'):
+        try:
+            max_id = max(max_id, int(f.get('id', '-1')))
+        except ValueError:
+            pass
+    next_id = max_id + 1
+    new_payloads = []
+    for t, payload, raw in raw_packets:
+        if t == 10:
+            try:
+                root = ET.fromstring(payload)
+                if root.tag != 'Features':
+                    raise ValueError("Invalid XML structure")
+            except Exception:
+                return original
+            for feat in features:
+                f_elem = feature_xml(feat, next_id, len(record))
+                root.append(f_elem)
+                next_id += 1
+            new_payloads.append(ET.tostring(root, encoding='utf-8'))
+        else:
+            new_payloads.append(payload)
+    if not new_payloads:
+        return original
+    replacement = bytes([10]) + struct.pack('>I', len(new_payloads[0])) + new_payloads[0]
+    result = bytearray(original)
+    start, end = raw_packets[0][2], raw_packets[0][2] + len(raw_packets[0][3])
+    if replacement:
+        result[start:end] = replacement
+    return bytes(result)
+```

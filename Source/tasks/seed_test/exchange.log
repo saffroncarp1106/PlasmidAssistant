@@ -1,0 +1,47 @@
+Write Python unittest source only. Import random unittest from seed_starts import candidate_starts. One test deterministic Random(42), query lengths [12,19,20,31,100], identities [1,.95,.8], 30 trials each. Create random ACGT query and random scan length3*L. Inject query into scan at offset L with random mutations count randint(0,L//4) chosen sample sites, substitute a different base. Compute exhaustive expected {s for s in range(len(scan)-L+1) if sum(a==b for a,b in zip(scan[s:s+L],query))/L>=identity}. Compute candidates=candidate_starts(scan,query,identity,len(scan)-L+1); actual same scoring filter only these candidates; assert actual==expected. Second test candidate_starts('AAAAAA','AAA',1,2)==[0,1]. Third invalid empty query raisesValueError. No implementation of candidate_starts. Main guard. Under65 lines.
+RESPONSE
+```python
+import random
+from seed_starts import candidate_starts
+import unittest
+
+class TestCandidateStarts(unittest.TestCase):
+    def test_deterministic_random(self):
+        random.seed(42)
+        lengths = [12, 19, 20, 31, 100]
+        identities = [1.0, 0.95, 0.8]
+        for L in lengths:
+            for identity in identities:
+                trials = 30
+                for _ in range(trials):
+                    scan_len = 3 * L
+                    query = ''.join(random.choices('ACGT', k=L))
+                    scan = ''.join(random.choices('ACGT', k=scan_len))
+                    
+                    offset = random.randint(0, L)
+                    mutation_count = random.randint(0, L // 4)
+                    sample_sites = random.sample(range(L), min(mutation_count, L))
+                    
+                    for site in sample_sites:
+                        bases = 'ACGT'
+                        current_base = scan[offset + site]
+                        new_base = bases[bases.index(current_base) + 1] if bases.index(current_base) < 3 else 'A'
+                        while new_base == current_base:
+                            new_base = random.choice('ACGT')
+                        scan = scan[:offset + site] + new_base + scan[offset + site + 1:]
+                    
+                    expected = [s for s in range(len(scan) - L + 1) 
+                               if sum(a == b for a, b in zip(scan[s:s+L], query)) / L >= identity]
+                    actual = candidate_starts(scan, query, identity, len(scan) - L + 1)
+                    self.assertEqual(actual, expected)
+
+    def test_simple_case(self):
+        self.assertEqual(candidate_starts('AAAAAA', 'AAA', 1.0, 2), [0, 1])
+
+    def test_invalid_query(self):
+        with self.assertRaises(ValueError):
+            candidate_starts('', '', 1.0, 0)
+
+if __name__ == '__main__':
+    unittest.main()
+```

@@ -1,0 +1,38 @@
+Python source only function translated_segments(sequence,circular=False,minimum_aa=80). Import Bio.Seq.Seq. sequence=str(sequence).upper(); n=len(sequence); results=[]. For strand,oriented in [(1,sequence),(-1,str(Seq(sequence).reverse_complement()))]: scan=oriented*2 if circular else oriented; for frame in range(3): start=frame; iterate pos=frame,frame+3,... len(scan)-3. codon=scan[pos:pos+3]; if codon in {'TAA','TAG','TGA'} OR set(codon)-set('ACGT'): if pos-start>=minimum_aa*3 and start<n and pos-start<=n: append dict(start=start,strand=strand,protein=str(Seq(scan[start:pos]).translate()),has_stop=codon in stops). start=pos+3. After loop trailing end=frame+((len(scan)-frame)//3)*3; if end-start>=minimum_aa*3 and start<n and end-start<=n append same with has_stop=False. Returnresults. Coordinates start are ORIENTED strand coordinates for later mapping. Do NOT require ATG. No stopcodon included in protein. No other functions. Correct indentation/readable under45lines.
+RESPONSE
+```python
+from Bio.Seq import Seq
+
+def translated_segments(sequence, circular=False, minimum_aa=80):
+    sequence = str(sequence).upper()
+    n = len(sequence)
+    results = []
+    stops = {'TAA', 'TAG', 'TGA'}
+    
+    for strand, oriented in [(1, sequence), (-1, str(Seq(sequence).reverse_complement()))]:
+        scan = oriented * 2 if circular else oriented
+        for frame in range(3):
+            start = frame
+            pos = frame
+            while pos < len(scan) - 2:
+                codon = scan[pos:pos+3]
+                if codon in stops or set(codon) - set('ACGT'):
+                    if pos - start >= minimum_aa * 3 and start < n:
+                        results.append({
+                            'start': start, 
+                            'strand': strand, 
+                            'protein': str(Seq(scan[start:pos]).translate()),
+                            'has_stop': codon in stops
+                        })
+                pos += 3
+            
+            end = frame + ((len(scan) - frame) // 3) * 3
+            if end - start >= minimum_aa * 3 and start < n:
+                results.append({
+                    'start': start, 
+                    'strand': strand, 
+                    'protein': str(Seq(scan[start:end]).translate()),
+                    'has_stop': False
+                })
+    return results
+```

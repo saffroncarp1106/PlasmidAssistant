@@ -1,0 +1,198 @@
+Write unittest source only no semicolons. Import random,unittest,Bio.Seq.Seq,Bio.SeqRecord.SeqRecord,alignment_candidates.alignment_candidates. Fixture random.Random(123) reference=''.join(rng.choice('ACGT') for _ in range(120)); entry fields sequence,feature_id='fixture',canonical_name='Synthetic',feature_type='misc_feature',source='synthetic',version='1'. Test partial: sequence reference[20:110], linear record; call candidates(record,[entry],[]); assert any h has match partial,identity1,coverage.75,location.strand1, set(h.location)==set(range(90)); assert none confidence High confidence. Test insertion reverse: target reference[:60]+'AAA'+reference[60:], reverse complement; candidates contains strand-1,coverage1, identity120/123, extracted feature seq equals target. Test circular: target reference[40:]+'NNNN'+reference[:40], topology circular; candidates contains forward location parts length2, identity1,coverage1, extracted seq reference. Test fast suppression: exact reference record; fast_hit entry same and location SimpleLocation(0,120,strand=1); candidates must not include forward matching same locus. Do not expect zero reverse incidental weak hits. Use SeqFeature(h['location']).extract(record.seq) for extraction. Main guard.
+FILE alignment_candidates.py
+def alignment_candidates(record, entries, fast_hits, minimum_identity=0.8, minimum_coverage=0.5, max_windows=20):
+    """
+    Heuristic: Seeds circular scan windows, aligns best local hits, filters by identity/coverage,
+    suppresses redundant fast hits (same name/strand with high overlap), and deduplicates by feature_id.
+    Limitation: max_windows caps seed search depth for performance; results are partial if coverage < 0.95.
+    """
+    from Bio.Seq import Seq
+    from matching import location
+    from local_alignment import align_best
+    from seed_windows import seed_windows
+
+    sequence = str(record.seq).upper()
+    n = len(sequence)
+    scan = sequence * 2 if record.annotations.get('topology') == 'circular' else sequence
+
+    results = []
+    seen = set()
+
+    oriented_entries = [(entry,strand,query) for entry in entries for strand,query in
+                        ((1,entry['sequence']),(-1,str(Seq(entry['sequence']).reverse_complement())))]
+    for entry, strand, query_seq in oriented_entries:
+        if len(query_seq) < 60:
+            continue
+
+        query_seq = query_seq.upper()
+
+        for window in seed_windows(scan, query_seq, n, max_windows):
+            left, right = window
+            evidence = align_best(scan[left:right], query_seq)
+            if not evidence:
+                continue
+
+            start = left + evidence['start']
+            length = evidence['end'] - evidence['start']
+
+            if not (0 <= start < n and 0 < length <= n):
+                continue
+
+            identity = evidence.get('identity', 0)
+            coverage = evidence.get('coverage', 0)
+
+            if identity < minimum_identity or coverage < minimum_coverage:
+                continue
+
+            loc = location(start, length, n, strand)
+
+            # Suppress if fast hit matches canonical name, strand, and has >=80% overlap
+            redundant = False
+            for fh in fast_hits:
+                if fh['entry'].get('canonical_name', '').casefold() == entry.get('canonical_name', '').casefold():
+                    if fh['location'].strand == strand:
+                        overlap = len(set(loc) & set(fh['location'])) / min(len(loc), len(fh['location']))
+                        if overlap >= 0.8:
+                            redundant = True
+                            break
+            if redundant:
+                continue
+
+            key = (entry.get('feature_id'), strand, str(loc))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            status = 'new'
+            match_type = 'gapped_variant' if coverage >= 0.95 else 'partial'
+            confidence = 'Moderate confidence' if identity >= 0.95 and coverage >= 0.8 else 'Weak evidence'
+
+            results.append({
+                'entry': entry,
+                'location': loc,
+                'identity': identity,
+                'coverage': coverage,
+                'match': match_type,
+                'confidence': confidence,
+                'status': status,
+                'method': 'seeded_local_alignment',
+                'reference_start': evidence['reference_start'],
+                'reference_end': evidence['reference_end']
+            })
+
+    return results
+
+RESPONSE
+import random
+import unittest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from alignment_candidates import alignment_candidates
+
+# Fixture setup
+rng = random.Random(123)
+REFERENCE = ''.join(rng.choice('ACGT') for _ in range(120))
+ENTRY_FIELDS = {
+    'sequence': REFERENCE[20:110],
+    'feature_id': 'fixture',
+    'canonical_name': 'Synthetic',
+    'feature_type': 'misc_feature',
+    'source': 'synthetic',
+    'version': '1'
+}
+
+class TestAlignmentCandidates(unittest.TestCase):
+
+    def test_partial_match(self):
+        record = SeqRecord(Seq(REFERENCE), id='test_ref')
+        entry = ENTRY_FIELDS.copy()
+        fast_hits = []
+        
+        candidates = alignment_candidates(record, [entry], fast_hits)
+        
+        self.assertTrue(any(c['match'] == 'partial' for c in candidates))
+        self.assertGreaterEqual(candidates[0]['identity'], 0.75)
+        self.assertEqual(set(candidates[0]['location']), set(range(90)))
+        self.assertNotIn('High confidence', [c['confidence'] for c in candidates])
+
+    def test_insertion_reverse(self):
+        target = REFERENCE[:60] + 'AAA' + REFERENCE[60:]
+        record = SeqRecord(Seq(target), id='test_ref_ins')
+        entry = ENTRY_FIELDS.copy()
+        
+        # Create a fast hit to trigger suppression logic if needed, but here we test reverse complement detection
+        fast_hits = []
+        
+        candidates = alignment_candidates(record, [entry], fast_hits)
+        
+        self.assertTrue(any(c['location'].strand == -1 for c in candidates))
+        self.assertGreaterEqual(candidates[0]['coverage'], 0.95)
+        extracted_seq = SeqFeature(candidates[0]['location']).extract(record.seq).upper()
+        self.assertEqual(extracted_seq, target.upper())
+
+    def test_circular_topology(self):
+        target = REFERENCE[40:] + 'NNNN' + REFERENCE[:40]
+        record = SeqRecord(Seq(target), id='test_ref_circ', annotations={'topology': 'circular'})
+        entry = ENTRY_FIELDS.copy()
+        
+        fast_hits = []
+        candidates = alignment_candidates(record, [entry], fast_hits)
+        
+        self.assertTrue(any(c['location'].strand == 1 for c in candidates))
+        # Check that location parts cover the circular shift logic implicitly via identity/coverage
+        self.assertGreaterEqual(candidates[0]['identity'], 0.95)
+        extracted_seq = SeqFeature(candidates[0]['location']).extract(record.seq).upper()
+        self.assertEqual(extracted_seq, REFERENCE.upper())
+
+    def test_fast_suppression(self):
+        record = SeqRecord(Seq(REFERENCE), id='test_ref_exact')
+        entry = ENTRY_FIELDS.copy()
+        
+        # Create a fast hit that matches exactly
+        from alignment_candidates import SimpleLocation
+        fast_hit_entry = entry.copy()
+        fast_hit_location = SimpleLocation(0, 120, strand=1)
+        fast_hits = [{'entry': fast_hit_entry, 'location': fast_hit_location}]
+        
+        candidates = alignment_candidates(record, [entry], fast_hits)
+        
+        # Should not include the forward matching same locus due to suppression
+        self.assertEqual(len(candidates), 0)
+
+    def test_no_zero_reverse_incidental(self):
+        record = SeqRecord(Seq(REFERENCE), id='test_ref_normal')
+        entry = ENTRY_FIELDS.copy()
+        
+        fast_hits = []
+        candidates = alignment_candidates(record, [entry], fast_hits)
+        
+        # Ensure we don't get zero reverse incidental weak hits as a failure condition
+        self.assertGreater(len(candidates), 0)
+
+class SeqFeature:
+    def __init__(self, location):
+        self.location = location
+        
+    def extract(self, seq):
+        start = self.location.start
+        end = self.location.end
+        strand = self.location.strand
+        if strand == -1:
+            return str(Seq(seq[start:end]).reverse_complement()).upper()
+        else:
+            return str(seq[start:end]).upper()
+
+class SimpleLocation:
+    def __init__(self, start, end, strand):
+        self.start = start
+        self.end = end
+        self.strand = strand
+        
+    def __iter__(self):
+        yield from range(self.start, self.end)
+        
+    def __len__(self):
+        return self.end - self.start
+
+if __name__ == '__main__':
+    unittest.main()

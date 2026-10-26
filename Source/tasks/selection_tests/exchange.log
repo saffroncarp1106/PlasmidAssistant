@@ -1,0 +1,45 @@
+Write unittest source only using Bio.SeqFeature SimpleLocation CompoundLocation SeqFeature and validate_selection. Three tests in unittest.TestCase. Same strand SimpleLocation(0,100,1) and (5,105,1) must raise ValueError. Opposite strands same positions allowed. Circular location parts [90:100,0:10] strand1 vs middle [20:80] strand1 allowed (occupied sets disjoint despite bounding box). Function construct SeqFeature locations. No mocks. Under40lines.
+FILE selection_guard.py
+def validate_selection(features):
+    for i in range(len(features)):
+        for j in range(i+1, len(features)):
+            a, b = features[i], features[j]
+            if not (a.location and b.location): continue
+            if a.location.strand != b.location.strand: continue
+            if a.location.strand not in (-1, 1): continue
+            set_a = set(a.location)
+            set_b = set(b.location)
+            inter = set_a & set_b
+            if not inter: continue
+            if len(inter)/len(set_a) < 0.8 or len(inter)/len(set_b) < 0.8: continue
+            raise ValueError('Selected annotations overlap at the same locus. Select one competing candidate before saving.')
+    return None
+RESPONSE
+```python
+from Bio import SeqFeature, SeqLocation
+import unittest
+
+def construct(features):
+    locs = [SeqFeature(SeqLocation(i, j, k), i) for i, j, k in features]
+    return locs
+
+class TestSelectionGuard(unittest.TestCase):
+    def test_same_strand_overlap(self):
+        f1 = construct([(0, 100, 1)])
+        f2 = construct([(5, 105, 1)])
+        with self.assertRaises(ValueError):
+            validate_selection(f1 + f2)
+
+    def test_opposite_strands_allowed(self):
+        f1 = construct([(0, 100, 1)])
+        f2 = construct([(5, 105, -1)])
+        self.assertIsNone(validate_selection(f1 + f2))
+
+    def test_circular_disjoint(self):
+        f1 = construct([(90, 100, 1), (0, 10, 1)])
+        f2 = construct([(20, 80, 1)])
+        self.assertIsNone(validate_selection(f1 + f2))
+
+if __name__ == '__main__':
+    unittest.main()
+```

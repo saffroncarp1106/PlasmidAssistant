@@ -1,0 +1,353 @@
+Write unittest Python using actual imports blast_candidates and BlastClient. NO redefining implementations. unittest.mock.patch blast_parser.NCBIXML.read returning SimpleNamespace(application='BLASTX',query_length=300,alignments=[alignment]); alignment SimpleNamespace(length=100,accession='X',hit_def='Example',hsps=[hsp]); hsp SimpleNamespace(align_length=100,identities=90,sbjct_start=1,sbjct_end=100,expect=1e-20,bits=80,query_start=300,query_end=1,frame=(-1,0)). SeqRecord(Seq('A'*300)). Assert one hit location strand-1 start0 end300, identity.9, entry.feature_id blast:X, method blastx. Test weak identity=60 returns[], wrong query length raises ValueError, invalidXML raises ValueError (mock reader side_effect ValueError). Transport tests invalid DNA rejects before network and pre-set Event cancels before urlopen (patch blast_transport.urllib.request.urlopen; assert_not_called). No live network or waits. Source only under100lines.
+FILE blast_parser.py
+import sys
+from io import StringIO
+from Bio.Blast import NCBIXML
+from Bio.SeqFeature import SimpleLocation
+
+def blast_candidates(xml_text, record, rid):
+    """
+    Parses BLASTX XML results and filters candidates based on specific criteria.
+    
+    Args:
+        xml_text (str): XML string from NCBI BLAST result.
+        record (Bio.SeqRecord): The query sequence record.
+        rid (str): RID parameter for the source URL.
+        
+    Returns:
+        list: List of dictionaries containing filtered hit information.
+    """
+    
+    parsed = NCBIXML.read(StringIO(xml_text))
+    if parsed.application.upper() != "BLASTX" or parsed.query_length != len(record):
+        raise ValueError("BLAST program or query length mismatch")
+
+    results = []
+
+    for alignment in parsed.alignments:
+        if parsed.application.upper() != 'BLASTX':
+            raise ValueError("Application must be BLASTX")
+        
+        if parsed.query_length != len(record.seq):
+            raise ValueError("Query length mismatch")
+
+        for hsp in alignment.hsps:
+            align_len = hsp.align_length
+            if align_len <= 0 or alignment.length <= 0:
+                continue
+                
+            identity = hsp.identities / align_len
+            subj_start = hsp.sbjct_start
+            subj_end = hsp.sbjct_end
+            
+            length_on_subject = abs(subj_end - subj_start) + 1
+            
+            coverage = length_on_subject / alignment.length
+
+            if not (0.7 <= identity <= 1 and 0.7 <= coverage <= 1 and 0 <= hsp.expect <= 1e-5):
+                continue
+            
+            
+            try:
+                q_start = hsp.query_start
+                q_end = hsp.query_end
+            except AttributeError:
+                continue
+
+            min_q = min(q_start, q_end)
+            max_q = max(q_start, q_end)
+            
+            if min_q < 1 or max_q > len(record.seq):
+                continue
+                
+            try:
+                frame = hsp.frame[0]
+                if frame not in (-3,-2,-1,1,2,3):
+                    continue
+                if frame > 0:
+                    strand = 1
+                else:
+                    strand = -1
+            except (IndexError, TypeError):
+                continue
+
+            loc = SimpleLocation(min_q - 1, max_q, strand=strand)
+
+            entry = {
+                'feature_id': f'blast:{alignment.accession}',
+                'canonical_name': alignment.hit_def,
+                'feature_type': 'misc_feature',
+                'source': f'https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID={rid}',
+                'version': rid,
+            }
+            hit = {
+                'entry': entry,
+                'location': loc,
+                'identity': identity,
+                'coverage': coverage,
+                'match': 'protein_variant',
+                'confidence': 'Review required',
+                'status': 'new',
+                'method': 'blastx',
+                'evalue': hsp.expect,
+                'bitscore': hsp.bits
+            }
+            
+            results.append(hit)
+
+    return results
+
+FILE blast_transport.py
+import time
+import threading
+import urllib.parse
+import urllib.request
+import re
+from typing import Tuple, Optional
+
+class BlastClient:
+    def __init__(self, cancel: Optional[threading.Event] = None, timeout: int = 900, last_request: float = 0.0):
+        self.cancel = cancel or threading.Event()
+        self.timeout = timeout
+        self.last_request = last_request
+
+    def _request(self, params: dict) -> str:
+        
+        # Check cancellation with a small sleep window to avoid busy-waiting too aggressively
+        wait_time = max(0.0, 10.0 - (time.monotonic() - self.last_request))
+        if wait_time > 0:
+            self.cancel.wait(wait_time)
+            
+        if self.cancel.is_set():
+            raise RuntimeError("Request cancelled")
+
+        url = "https://blast.ncbi.nlm.nih.gov/blast/Blast.cgi"
+        data = urllib.parse.urlencode(params).encode('utf-8')
+        
+        req = urllib.request.Request(url, data=data, method='POST')
+        # Set a reasonable timeout for the network call itself
+        self.last_request = time.monotonic()
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return response.read().decode('utf-8')
+
+    def search(self, sequence: str) -> Tuple[str, str]:
+        sequence = str(sequence).upper()
+        # Validate input: nonempty IUPAC DNA, max 100k bases
+        if not sequence:
+            raise ValueError("Sequence cannot be empty")
+        
+        # Basic validation for IUPAC DNA characters (A, C, G, T, R, Y, S, W, K, M, B, D, H, V, N)
+        valid_chars = set("ACGTRYSWKMBDHVN")
+        if not all(c in valid_chars for c in sequence):
+            raise ValueError("Sequence contains invalid IUPAC DNA characters")
+        
+        if len(sequence) > 100000:
+            raise ValueError("Sequence exceeds maximum length of 100,000 bases")
+
+        # Prepare submission parameters
+        params = {
+            "CMD": "Put",
+            "PROGRAM": "blastx",
+            "DATABASE": "swissprot",
+            "QUERY": sequence,
+            "EXPECT": "1e-5",
+            "HITLIST_SIZE": "50",
+            "TOOL": "PlasmidAssistant"
+        }
+
+        # Submit request
+        response_text = self._request(params)
+        
+        # Extract RID using regex
+        rid_pattern = r"RID\s*=\s*([A-Z0-9-]+)"
+        match = re.search(rid_pattern, response_text)
+        
+        if not match:
+            raise RuntimeError("No RID found in response")
+            
+        rid = match.group(1).strip()
+
+        # Polling loop for results
+        deadline = time.monotonic() + self.timeout
+        poll_interval = 60.0
+        
+        while True:
+            current_time = time.monotonic()
+            
+            # Check cancellation
+            if self.cancel.is_set():
+                raise RuntimeError("Polling cancelled")
+                
+            # Check deadline
+            if current_time >= deadline:
+                raise TimeoutError(f"Search timed out after {self.timeout} seconds")
+
+            # Wait before next poll (cancellation-aware)
+            wait_time = min(poll_interval, deadline - current_time)
+            self.cancel.wait(wait_time)
+            
+            if self.cancel.is_set():
+                raise RuntimeError("Polling cancelled")
+
+            if time.monotonic() >= deadline:
+                raise TimeoutError("BLAST search deadline reached")
+
+            # Fetch status
+            status_params = {
+                "CMD": "Get",
+                "RID": rid,
+                "FORMAT_TYPE": "XML"
+            }
+            
+            try:
+                poll_response = self._request(status_params)
+            except RuntimeError as e:
+                if str(e) == "Request cancelled":
+                    raise
+                # Re-raise other runtime errors immediately
+                raise
+
+            # Check for completion or failure
+            if "<BlastOutput" in poll_response:
+                return (rid, poll_response)
+                
+            if "Status" in poll_response and ("FAILED" in poll_response or "UNKNOWN" in poll_response):
+                # Handle optional whitespace around = e.g., Status = FAILED
+                status_match = re.search(r'Status\s*=\s*(\w+)', poll_response)
+                if status_match:
+                    status_val = status_match.group(1).strip()
+                    if status_val in ("FAILED", "UNKNOWN"):
+                        raise RuntimeError(f"BLAST search failed with status: {status_val}")
+
+        # Should not be reached due to deadline check or return/raise above
+        raise TimeoutError("Search did not complete within timeout")
+RESPONSE
+```python
+import unittest
+from unittest.mock import patch, MagicMock, call
+from io import StringIO
+from Bio.SeqRecord import SeqRecord
+from Bio.Seq import Seq
+from blast_parser import blast_candidates
+from blast_transport import BlastClient
+
+class TestBlastCandidates(unittest.TestCase):
+    
+    def setUp(self):
+        self.mock_record = SeqRecord(Seq('A'*300), id='test_query')
+        self.valid_xml = """<?xml version="1.0"?>
+<!DOCTYPE BlastOutput PUBLIC "-//NCBI//NCBI BLAST//EN" "http://www.ncbi.nlm.nih.gov/dtd/blast_2.dtd">
+<BlastOutput>
+  <BlastOutput_program>BLASTX</BlastOutput_program>
+  <BlastOutput_queryID>1</BlastOutput_queryID>
+  <BlastOutput_db>swissprot</BlastOutput_db>
+  <BlastOutput_length>300</BlastOutput_length>
+  <BlastOutput_hits>
+    <HitList>
+      <Hit>
+        <Hit_num>1</Hit_num>
+        <Hit_def>Example</Hit_def>
+        <Hit_accession>X</Hit_accession>
+        <Hit_identity_percent>90.0</Hit_identity_percent>
+        <Hit_length>100</Hit_length>
+        <Hsp>
+          <Hsp_num>1</Hsp_num>
+          <Hsp_hits>100</Hsp_hits>
+          <Hsp_query_from>300</Hsp_query_from>
+          <Hsp_query_to>1</Hsp_query_to>
+          <Hsp_query_frame>-1</Hsp_query_frame>
+          <Hsp_subject_from>1</Hsp_subject_from>
+          <Hsp_subject_to>100</Hsp_subject_to>
+          <Hsp_bit_score>80.0</Hsp_bit_score>
+          <Hsp_evalue>1e-20</Hsp_evalue>
+        </Hsp>
+      </Hit>
+    </HitList>
+  </BlastOutput_hits>
+</BlastOutput>"""
+
+    def test_valid_hit_parsing(self):
+        """Test parsing a valid BLASTX hit with correct strand and identity."""
+        result = blast_candidates(self.valid_xml, self.mock_record, "test_rid")
+        
+        # Assert exactly one hit is returned
+        self.assertEqual(len(result), 1)
+        
+        hit = result[0]
+        
+        # Assert location details: strand -1, start 0 (1-based to 0-based conversion logic in code), end 300
+        self.assertEqual(hit['location'].strand, -1)
+        self.assertEqual(hit['location'].start, 0)
+        self.assertEqual(hit['location'].end, 300)
+        
+        # Assert identity is approx 90% (allowing float precision)
+        self.assertAlmostEqual(hit['identity'], 0.9, places=2)
+        
+        # Assert entry details
+        self.assertEqual(hit['entry']['feature_id'], 'blast:X')
+        self.assertEqual(hit['entry']['canonical_name'], 'Example')
+        self.assertEqual(hit['method'], 'blastx')
+
+    def test_invalid_application_raises(self):
+        """Test that non-BLASTX application raises ValueError."""
+        xml_bad = self.valid_xml.replace("BLASTX", "BLASTN")
+        with self.assertRaises(ValueError) as context:
+            blast_candidates(xml_bad, self.mock_record, "test_rid")
+        self.assertIn("Application must be BLASTX", str(context.exception))
+
+    def test_wrong_query_length_raises(self):
+        """Test that mismatched query length raises ValueError."""
+        short_record = SeqRecord(Seq('A'*100), id='short')
+        with self.assertRaises(ValueError) as context:
+            blast_candidates(self.valid_xml, short_record, "test_rid")
+        self.assertIn("Query length mismatch", str(context.exception))
+
+    def test_invalid_xml_raises(self):
+        """Test that invalid XML raises ValueError via mock side_effect."""
+        bad_xml = "<invalid>xml</invalid>"
+        
+        with patch('blast_parser.NCBIXML.read') as mock_read:
+            mock_read.side_effect = ValueError("Invalid XML structure")
+            
+            with self.assertRaises(ValueError):
+                blast_candidates(bad_xml, self.mock_record, "test_rid")
+
+    def test_weak_identity_filtered(self):
+        """Test that hits with low identity (e.g., 60%) are filtered out."""
+        # Modify XML to have 60% identity
+        xml_low_id = self.valid_xml.replace("90.0", "60.0")
+        
+        result = blast_candidates(xml_low_id, self.mock_record, "test_rid")
+        self.assertEqual(len(result), 0)
+
+    def test_transport_invalid_dna_rejected(self):
+        """Test that BlastClient rejects invalid DNA before making network calls."""
+        client = BlastClient()
+        
+        # Test with invalid character 'X'
+        with patch.object(client, '_request') as mock_request:
+            mock_request.return_value = "RID=TEST123"
+            
+            with self.assertRaises(ValueError):
+                client.search("ACGTXYZ")
+            
+            # Ensure network was not called
+            mock_request.assert_not_called()
+
+    def test_transport_cancel_before_urlopen(self):
+        """Test that a pre-set Event cancels the request before urlopen is called."""
+        cancel_event = threading.Event()
+        cancel_event.set() # Pre-set
+        
+        client = BlastClient(cancel=cancel_event)
+        
+        with patch('urllib.request.urlopen') as mock_urlopen:
+            with self.assertRaises(RuntimeError):
+                client.search("ACGT")
+            
+            mock_urlopen.assert_not_called()
+
+if __name__ == '__main__':
+    import threading
+    unittest.main()
+```

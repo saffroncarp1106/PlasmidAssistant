@@ -1,0 +1,85 @@
+Write Python unittest file source ONLY. ONE test calling native_export.export with types.SimpleNamespace object. Do NOT use Tk or App. obj.record=object(), obj.input_path=temp/source.dna, obj.input_bytes=b'old', obj.selected_ids=set(), obj.row_to_feature={}, obj.tree=Mock(); obj.tree.get_children.return_value=[]. Write source b'changed'. Patch tkinter.filedialog.asksaveasfilename return temp/out.dna, tkinter.messagebox.showerror as error, tkinter.messagebox.showinfo, dna_writer.write_annotated_dna as writer. INSIDE all patch contexts call export(obj) ONCE. Assert error called once, 'changed' in error.call_args.args[1], writer.assert_not_called(), output.exists() false, source.read_bytes()==b'changed'. Use TemporaryDirectory. NO sys.modules edits. NO swallowing exceptions. No main needed. Standard imports unittest,tempfile,Path,SimpleNamespace,Mock,patch, from native_export import export. Under40 lines. This is source change guard verification only.
+FILE native_export.py
+def export(self):
+    from copy import deepcopy
+    from pathlib import Path
+    import io
+    import dna_writer
+    from tkinter import filedialog, messagebox
+    if self.record is None:
+        return
+    native = self.input_path.suffix.lower() == '.dna'
+    default_ext = '.dna' if native else '.gb'
+    filetypes = [('SnapGene DNA', '*.dna'), ('GenBank', '*.gb')] if native else [('GenBank', '*.gb')]
+    path = filedialog.asksaveasfilename(
+        defaultextension=default_ext,
+        initialfile=self.input_path.stem + '_autoannotated' + default_ext,
+        filetypes=filetypes
+    )
+    if not path:
+        return
+    try:
+        selected = [deepcopy(self.row_to_feature[row]) for row in self.tree.get_children() if row in self.selected_ids]
+        suffix = Path(path).suffix.lower()
+        if suffix == '.dna':
+            if not native:
+                raise ValueError('Native format required for .dna files.')
+            if self.input_path.read_bytes() != self.input_bytes:
+                raise ValueError('Source file changed since loading.')
+            dna_writer.write_annotated_dna(self.input_path, Path(path), selected)
+        elif suffix in ('.gb', '.gbk', '.genbank'):
+            from Bio import SeqIO
+            record_copy = deepcopy(self.record)
+            record_copy.features.extend(selected)
+            record_copy.annotations['molecule_type'] = 'DNA'
+            stream = io.StringIO()
+            SeqIO.write(record_copy, stream, 'genbank')
+            with Path(path).open('x', encoding='utf-8') as f:
+                f.write(stream.getvalue())
+        else:
+            raise ValueError(f'Unsupported extension: {suffix}')
+        messagebox.showinfo('Exported', f'New annotated copy saved to:\n{path}')
+    except Exception as error:
+        messagebox.showerror('Export failed', str(error))
+
+RESPONSE
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory, NamedTemporaryFile
+from unittest.mock import Mock, patch
+from types import SimpleNamespace
+from native_export import export
+
+
+class TestExportGuard(unittest.TestCase):
+    def test_source_change_guard(self):
+        with TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "source.dna"
+            source_path.write_bytes(b'old')
+            
+            obj = SimpleNamespace(
+                record=Mock(),
+                input_path=source_path,
+                input_bytes=b'old',
+                selected_ids=set(),
+                row_to_feature={},
+                tree=Mock()
+            )
+            obj.tree.get_children.return_value = []
+            
+            with patch('tkinter.filedialog.asksaveasfilename', return_value=str(Path(tmp) / "out.dna")), \
+                 patch('tkinter.messagebox.showerror') as error_mock, \
+                 patch('tkinter.messagebox.showinfo'), \
+                 patch('native_export.dna_writer.write_annotated_dna') as writer_mock:
+                
+                export(obj)
+                
+                error_mock.assert_called_once()
+                self.assertIn(b'changed', error_mock.call_args.args[1])
+                writer_mock.assert_not_called()
+                self.assertFalse((Path(tmp) / "out.dna").exists())
+                self.assertEqual(source_path.read_bytes(), b'changed')
+
+
+if __name__ == '__main__':
+    unittest.main()

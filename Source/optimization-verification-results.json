@@ -1,0 +1,29 @@
+[
+  {
+    "command": [
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      ".",
+      "-p",
+      "test_*.py"
+    ],
+    "exit_code": 0,
+    "output": "....................................................\n----------------------------------------------------------------------\nRan 52 tests in 0.635s\n\nOK\n"
+  },
+  {
+    "command": [
+      "check_example_protein.py"
+    ],
+    "exit_code": 0,
+    "output": "Candidate: mRFP1\nLocation: start=4105, end=4780\nIdentity: 1.0, Coverage: 0.9955555555555555\n"
+  },
+  {
+    "command": [
+      "check_objective.py"
+    ],
+    "exit_code": 0,
+    "output": "Summary: [\n  {\n    \"identity\": 0.9966044142614601,\n    \"coverage\": 1.0,\n    \"match\": \"variant\",\n    \"confidence\": \"Moderate confidence\",\n    \"status\": \"existing\",\n    \"feature_id\": \"ori-8e842ad3cb95\",\n    \"name\": \"ori\",\n    \"location\": \"[634:1223](-)\"\n  },\n  {\n    \"identity\": 1.0,\n    \"coverage\": 1.0,\n    \"match\": \"exact\",\n    \"confidence\": \"High confidence\",\n    \"status\": \"existing\",\n    \"feature_id\": \"ori-42572b15720c\",\n    \"name\": \"ori\",\n    \"location\": \"[634:1223](-)\"\n  },\n  {\n    \"identity\": 1.0,\n    \"coverage\": 1.0,\n    \"match\": \"exact\",\n    \"confidence\": \"High confidence\",\n    \"status\": \"new\",\n    \"feature_id\": \"AmpR-40f8697fcecb\",\n    \"name\": \"AmpR\",\n    \"location\": \"[1394:2255](-)\"\n  },\n  {\n    \"identity\": 0.99830220713073,\n    \"coverage\": 1.0,\n    \"match\": \"variant\",\n    \"confidence\": \"Moderate confidence\",\n    \"status\": \"existing\",\n    \"feature_id\": \"ori-5df29f7a3dbe\",\n    \"name\": \"ori\",\n    \"location\": \"[634:1223](-)\"\n  },\n  {\n    \"identity\": 1.0,\n    \"coverage\": 1.0,\n    \"match\": \"exact\",\n    \"confidence\": \"High confidence\",\n    \"status\": \"new\",\n    \"feature_id\": \"NOS terminator-07296665a19d\",\n    \"name\": \"NOS terminator\",\n    \"location\": \"[6321:6574](+)\"\n  },\n  {\n    \"identity\": 1.0,\n    \"coverage\": 1.0,\n    \"match\": \"exact\",\n    \"confidence\": \"High confidence\",\n    \"status\": \"existing\",\n    \"feature_id\": \"CYC1 terminator-fcd578524f6c\",\n    \"name\": \"CYC1 terminator\",\n    \"location\": \"[4780:5028](+)\"\n  },\n  {\n    \"identity\": 0.754653130287648,\n    \"coverage\": 1.0,\n    \"match\": \"gapped_variant\",\n    \"confidence\": \"Weak evidence\",\n    \"status\": \"existing\",\n    \"method\": \"seeded_local_alignment\",\n    \"reference_start\": 0,\n    \"reference_end\": 546,\n    \"feature_id\": \"p15A ori-17ecde5e4e47\",\n    \"name\": \"p15A ori\",\n    \"location\": \"[634:1223](-)\"\n  },\n  {\n    \"start\": 16,\n    \"end\": 465,\n    \"reference_start\": 0,\n    \"reference_end\": 449,\n    \"identity\": 0.9955456570155902,\n    \"coverage\": 1.0,\n    \"reference_coverage\": 1.0,\n    \"query_coverage\": 0.9655913978494624,\n    \"score\": 892.0,\n    \"aligned_columns\": 449,\n    \"match\": \"protein_variant\",\n    \"confidence\": \"Moderate confidence\",\n    \"status\": \"new\",\n    \"method\": \"protein_local_alignment\",\n    \"feature_id\": \"UniProt:Q5A5Q6\",\n    \"name\": \"ASH1 (C. albicans)\",\n    \"location\": \"[2755:4105](+)\"\n  },\n  {\n    \"start\": 0,\n    \"end\": 224,\n    \"reference_start\": 1,\n    \"reference_end\": 225,\n    \"identity\": 1.0,\n    \"coverage\": 0.9955555555555555,\n    \"reference_coverage\": 0.9955555555555555,\n    \"query_coverage\": 1.0,\n    \"score\": 448.0,\n    \"aligned_columns\": 224,\n    \"match\": \"protein_variant\",\n    \"confidence\": \"Moderate confidence\",\n    \"status\": \"new\",\n    \"method\": \"protein_local_alignment\",\n    \"feature_id\": \"GenBank:CAH64892.1\",\n    \"name\": \"mRFP1\",\n    \"location\": \"[4105:4780](+)\"\n  },\n  {\n    \"start\": 10,\n    \"end\": 273,\n    \"reference_start\": 4,\n    \"reference_end\": 265,\n    \"identity\": 0.7186311787072244,\n    \"coverage\": 0.9775280898876404,\n    \"reference_coverage\": 0.9775280898876404,\n    \"query_coverage\": 0.9598540145985401,\n    \"score\": 300.5,\n    \"aligned_columns\": 263,\n    \"match\": \"protein_variant\",\n    \"confidence\": \"Weak evidence\",\n    \"status\": \"new\",\n    \"method\": \"protein_local_alignment\",\n    \"feature_id\": \"UniProt:P03962\",\n    \"name\": \"URA3\",\n    \"location\": \"[5526:6315](+)\"\n  }\n]\n"
+  }
+]

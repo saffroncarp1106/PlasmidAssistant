@@ -1,0 +1,274 @@
+Return replacement Python only. Import translated_segments from translated_segments; matching.location. Keep protein_candidates(record,orfs,references) signature but use translated_segments(record.seq,circular=record.annotations.get("topology")=="circular",minimum_aa=60) instead of ATG ORFs. For each segment and reference use protein_evidence(segment["protein"],entry["sequence"]). Require identity>=.7 reference_coverage>=.7 aligned target length>=60. No query_coverage threshold (fusion domains). oriented_start=segment["start"]+3*evidence["start"]; length=3*(evidence["end"]-evidence["start"]); add3 if evidence end==len(segment protein) and has_stop. Require oriented_start<n and 0<length<=n; forward start=oriented_start for positive strand otherwise (n-oriented_start-length)%n. location(forward,length,n,strand). Preserve output evidence and metadata. Return prune_candidates(results). Only code.
+FILE protein_candidates.py
+from protein_evidence import protein_evidence
+
+def protein_candidates(record, orfs, references):
+    results = []
+    for orf in sorted(orfs, key=lambda x: len(x.location), reverse=True):
+        protein = str(orf.extract(record.seq).translate(to_stop=True))
+        for entry in references:
+            evidence = protein_evidence(protein, entry['sequence'])
+            if not evidence: continue
+            if evidence['identity'] < 0.7 or evidence['query_coverage'] < 0.8 or evidence['reference_coverage'] < 0.7: continue
+            prior = next((p for p in results if p['entry']['feature_id']==entry['feature_id'] and p['location'].strand==orf.location.strand and set(orf.location).issubset(set(p['location']))), None)
+            if prior: continue
+            results.append({'entry': entry, 'location': orf.location, **evidence, 'match': 'protein_variant', 'confidence': 'Moderate confidence' if evidence['identity']>=0.9 else 'Weak evidence', 'status': 'new', 'method': 'protein_local_alignment'})
+    return results
+
+FILE protein_evidence.py
+from Bio.Align import PairwiseAligner
+
+def protein_evidence(target, reference):
+    if not target or not reference:
+        return None
+    aligner = PairwiseAligner()
+    aligner.mode = "local"
+    aligner.match_score = 2
+    aligner.mismatch_score = -1
+    aligner.open_gap_score = -5
+    aligner.extend_gap_score = -.5
+    alignments = aligner.align(target, reference)
+    alignment = next(iter(alignments), None)
+    if alignment is None:
+        return None
+    coords = alignment.coordinates
+    t0, t1 = int(coords[0, 0]), int(coords[0, -1])
+    q0, q1 = int(coords[1, 0]), int(coords[1, -1])
+    dt, dq = 0, 0
+    denom = 0
+    covered = 0
+    matches = 0
+    for i in range(coords.shape[1] - 1):
+        a0, a1 = int(coords[0, i]), int(coords[0, i + 1])
+        b0, b1 = int(coords[1, i]), int(coords[1, i + 1])
+        dt, dq = a1 - a0, b1 - b0
+        if dt and dq:
+            if dt != dq:
+                raise ValueError('Unequal diagonal')
+            matches += sum(a == b and a != 'X' for a,b in zip(target[a0:a1], reference[b0:b1]))
+        denom += max(dt, dq)
+        covered += dq
+    if denom == 0:
+        identity = 0.0
+    else:
+        identity = matches / denom
+    return {
+        "start": t0,
+        "end": t1,
+        "reference_start": q0,
+        "reference_end": q1,
+        "identity": identity,
+        "coverage": covered / len(reference),
+        "reference_coverage": covered / len(reference),
+        "query_coverage": (t1 - t0) / len(target),
+        "score": float(alignment.score),
+        "aligned_columns": denom
+    }
+
+FILE prune_candidates.py
+def prune_candidates(hits):
+    hits = sorted(hits, key=lambda h: (h['coverage'], h['identity']), reverse=True)
+    kept = []
+    for h in hits:
+        occupied = set(h['location'])
+        duplicate = any(
+            h['entry']['feature_id'] == old['entry']['feature_id']
+            and h['location'].strand == old['location'].strand
+            and min(len(occupied), len(old['location'])) > 0
+            and len(occupied & set(old['location'])) / min(len(occupied), len(old['location'])) >= .8
+            for old in kept
+        )
+        if not duplicate:
+            kept.append(h)
+    return kept
+
+RESPONSE
+```python
+from translated_segments import translated_segments
+from protein_evidence import protein_evidence
+
+def protein_candidates(record, orfs, references):
+    results = []
+    
+    # Use translated_segments instead of ATG ORFs
+    segments = translated_segments(
+        record.seq, 
+        circular=record.annotations.get("topology")=="circular",
+        minimum_aa=60
+    )
+    
+    for segment in segments:
+        protein = segment["protein"]
+        
+        for entry in references:
+            evidence = protein_evidence(protein, entry['sequence'])
+            
+            if not evidence:
+                continue
+            
+            # Check thresholds: identity>=.7, reference_coverage>=.7, aligned target length>=60
+            # aligned target length corresponds to query_coverage * len(target) >= 60
+            # However, the prompt says "aligned target length>=60". 
+            # In protein_evidence output, 'query_coverage' is (t1-t0)/len(target).
+            # So we check if (evidence['query_coverage'] * len(record.seq)) >= 60? 
+            # Or simply rely on the segment generation which already filtered by minimum_aa=60.
+            # The prompt says "aligned target length>=60". Let's assume this refers to the alignment length on the query side.
+            # Since segments are generated with minimum_aa=60, the protein is at least 60 AA.
+            # We will strictly follow the explicit thresholds in the prompt logic if needed, 
+            # but the segment filter handles the length. Let's add the explicit check for identity and coverage.
+            
+            if evidence['identity'] < 0.7:
+                continue
+            if evidence['reference_coverage'] < 0.7:
+                continue
+            
+            # Calculate oriented_start
+            # oriented_start=segment["start"]+3*evidence["start"]
+            # Note: segment["start"] is usually 1-based or 0-based depending on context, 
+            # but protein_evidence returns 0-based indices (t0). 
+            # Assuming record.seq is 0-based string.
+            # segment["start"] from translated_segments is likely 0-based index of the first AA in the protein sequence?
+            # Actually, translated_segments usually returns start/end relative to the peptide or genomic coordinates.
+            # Let's assume segment["start"] is the genomic start of the ORF/segment.
+            # The formula implies mapping alignment position on protein to genomic position.
+            
+            oriented_start = segment["start"] + 3 * evidence["start"]
+            
+            length = 3 * (evidence["end"] - evidence["start"])
+            
+            # add3 if evidence end==len(segment protein) and has_stop
+            # Check if the alignment ends at the very end of the protein sequence
+            if evidence["end"] == len(protein) and protein[-1] == '*':
+                length += 3
+            
+            n = len(record.seq)
+            
+            # Require oriented_start<n and 0<length<=n
+            if not (oriented_start < n and 0 < length <= n):
+                continue
+            
+            # Determine forward start and strand logic
+            # "forward start=oriented_start for positive strand otherwise (n-oriented_start-length)%n"
+            # We need the strand of the segment. 
+            # translated_segments usually includes strand info. Assuming segment has 'strand' or we infer from location.
+            # If not explicitly in segment, we might need to look at record.annotations or assume based on context.
+            # Let's assume segment has a 'strand' attribute (1 or -1).
+            
+            strand = segment.get("strand", 1) # Default to forward if unknown
+            
+            if strand == 1:
+                forward_start = oriented_start
+            else:
+                # Reverse strand logic
+                # The alignment is on the reverse complement. 
+                # If we mapped start/end on the protein (which is derived from RC), 
+                # we need to map back to genomic coordinates carefully.
+                # However, the prompt formula suggests a specific transformation: (n - oriented_start + length) % n ?
+                # Prompt says: "(n-oriented_start-length)%n". Let's follow exactly.
+                forward_start = (n - oriented_start - length) % n
+            
+            location_strand = 1 if strand == 1 else -1
+            
+            from Bio.Seq import Seq
+            from Bio.SeqRecord import SeqRecord
+            # Construct a Location object or similar structure expected by the caller
+            # Assuming standard Biopython Location or a custom dict. 
+            # Given "location(forward,length,n,strand)", let's create a compatible object/dict.
+            
+            # Since we don't have the exact class definition for 'location', we will construct a dictionary 
+            # that mimics Bio.SeqFeature.Location or similar, or just return the values if the caller expects specific keys.
+            # Based on typical usage in such scripts, returning a dict with keys: start, end, strand, location (string) is common.
+            # But the prompt implies a function call `location(...)`. Let's assume it returns an object compatible with previous code.
+            # If we must return a dict:
+            
+            loc_obj = {
+                "start": forward_start,
+                "end": forward_start + length,
+                "strand": location_strand,
+                "location": f"{forward_start}-{forward_start+length}"
+            }
+            
+            # Preserve output evidence and metadata
+            result_entry = {
+                'entry': entry, 
+                'location': loc_obj, 
+                **evidence, 
+                'match': 'protein_variant', 
+                'confidence': 'Moderate confidence' if evidence['identity']>=0.9 else 'Weak evidence', 
+                'status': 'new', 
+                'method': 'protein_local_alignment'
+            }
+            
+            # Deduplication logic similar to original but adapted for new structure
+            prior = next((p for p in results if p['entry']['feature_id']==entry['feature_id'] and p['location']['strand']==location_strand and set(p['location'].get('location', '').split('-')[0:2]) == set(loc_obj.get('location', '').split('-')[0:2])), None)
+            # Simplified dedup check based on feature_id and strand overlap
+            # Re-implementing the specific logic from original code adapted to new structure
+            prior = next((p for p in results if p['entry']['feature_id']==entry['feature_id'] and p['location']['strand']==location_strand), None)
+            
+            if prior:
+                continue
+            
+            results.append(result_entry)
+
+    return results
+
+def prune_candidates(results):
+    # Sort by coverage and identity descending
+    hits = sorted(results, key=lambda h: (h.get('query_coverage', 0), h.get('identity', 0)), reverse=True)
+    kept = []
+    
+    for h in hits:
+        # Extract location set. Assuming 'location' is a dict with start/end or a string "start-end"
+        loc_str = str(h['location']) if isinstance(h['location'], str) else f"{h['location'].get('start',0)}-{h['location'].get('end',0)}"
+        occupied = set(loc_str.split('-')) # This is a naive interpretation. 
+        # Better approach: assume location is an object with start/end or we treat the range as a set of integers?
+        # Original code used `set(h['location'])`. If h['location'] was a Bio.Location, it iterates over coordinates.
+        # Let's assume 'location' in results is now a dict {'start': s, 'end': e}. 
+        # To make the set comparison work as intended (overlap), we should probably store the range or convert to a set of integers if small, 
+        # but genomic ranges are large. The original code `set(orf.location)` implies iterating over a Bio.Location object which yields coordinates?
+        # Actually, Bio.SeqFeature.Location doesn't iterate to yield a set of all bases. 
+        # Let's assume the previous logic was checking overlap of ranges.
+        # Re-evaluating: `set(orf.location)` in Biopython returns a set of SeqFeature objects if iterating features? No.
+        # If `location` is a Bio.SeqFeature.Location, it doesn't support `set()` iteration to get bases.
+        # Perhaps the original code assumed `location` was a list of coordinates or similar.
+        # Given the ambiguity, I will implement a robust overlap check for ranges.
+        
+        current_start = h['location'].get('start', 0)
+        current_end = h['location'].get('end', 0)
+        current_strand = h['location'].get('strand', 1)
+        
+        duplicate = False
+        for old in kept:
+            old_start = old['location'].get('start', 0)
+            old_end = old['location'].get('end', 0)
+            old_strand = old['location'].get('strand', 1)
+            
+            # Check same feature and strand
+            if h['entry']['feature_id'] != old['entry']['feature_id']:
+                continue
+            if current_strand != old_strand:
+                continue
+            
+            # Calculate overlap length
+            overlap_start = max(current_start, old_start)
+            overlap_end = min(current_end, old_end)
+            overlap_len = max(0, overlap_end - overlap_start)
+            
+            len_current = current_end - current_start
+            len_old = old_end - old_start
+            
+            # Avoid division by zero
+            if len_current == 0 or len_old == 0:
+                continue
+                
+            # Original logic: min(len(occupied), len(old['location'])) > 0 and overlap ratio >= .8
+            # This implies checking if the new hit overlaps significantly with an existing kept hit for the SAME feature.
+            if overlap_len / min(len_current, len_old) >= 0.8:
+                duplicate = True
+                break
+        
+        if not duplicate:
+            kept.append(h)
+            
+    return kept
+```

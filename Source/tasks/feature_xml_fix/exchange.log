@@ -1,0 +1,72 @@
+Fix only these concrete errors in supplied module and return complete corrected source in JSON code/report. 1. qualifiers: one Q element per key, then V child per value with text ATTRIBUTE; include label too. Example q=ET.SubElement(feat_elem,'Q',{'name':str(key)}); ET.SubElement(q,'V',{'text':str(v)}). 2. reverse-strand segment order: reverse parts BEFORE the loop that adds Segment nodes. Remove unused segments list and its reverse. Preserve all validation. Return only corrected code and brief report. No new parser or extra functionality.
+FILE tasks/feature_xml/feature_xml.py
+from Bio.SeqFeature import SeqFeature, ExactPosition
+import xml.etree.ElementTree as ET
+
+def feature_xml(feature, feature_id, sequence_length):
+    if feature.location is None:
+        raise ValueError("Location cannot be None")
+    if feature.location.strand not in (1, -1):
+        raise ValueError(f"Strand must be 1 or -1, got {feature.location.strand}")
+    
+    # Check all parts have same strand and are ExactPosition
+    parts = list(feature.location.parts)
+    if len(parts) == 0:
+        raise ValueError("No location parts found")
+    
+    first_strand = parts[0].strand
+    for part in parts:
+        if part.strand != first_strand:
+            raise ValueError(f"All parts must have the same strand, got {part.strand}")
+        if not isinstance(part.start, ExactPosition) or not isinstance(part.end, ExactPosition):
+            raise ValueError("Both endpoints must be ExactPosition")
+        if part.start >= sequence_length or part.end > sequence_length:
+            raise ValueError(f"Endpoints exceed sequence_length {sequence_length}")
+        if part.start < 0 or part.end <= part.start:
+            raise ValueError(f"Invalid range: start={part.start}, end={part.end}")
+    
+    # Determine directionality
+    directionality = '2' if feature.location.strand == -1 else '1'
+    
+    # Build Feature element
+    feat_elem = ET.Element('Feature')
+    feat_elem.set('id', str(feature_id))
+    label = feature.qualifiers.get('label', [feature.type])[0]
+    feat_elem.set('name', label)
+    feat_elem.set('type', feature.type)
+    feat_elem.set('directionality', directionality)
+    
+    # Process qualifiers
+    for key, value in feature.qualifiers.items():
+        if key == 'label':
+            continue  # Already handled as 'name'
+        if isinstance(value, list):
+            val_list = value
+        else:
+            val_list = [value]
+        for v in val_list:
+            q_elem = ET.SubElement(feat_elem, 'Q')
+            q_elem.set('name', str(key))
+            q_elem.text = str(v)
+    
+    # Build Segment nodes
+    segments = []
+    for part in parts:
+        seg_range = f'{int(part.start)+1}-{int(part.end)}'
+        seg_elem = ET.SubElement(feat_elem, 'Segment')
+        seg_elem.set('range', seg_range)
+        seg_elem.set('type', 'standard')
+        seg_elem.set('color', '#4CAF50')
+    
+    # Reverse segments if strand is -1
+    if feature.location.strand == -1:
+        segments.reverse()
+    
+    return feat_elem
+RESPONSE
+```json
+{
+  "report": "Corrected concrete errors: 1. Restructured 'Q' element creation to use SubElement with a dict for attributes ('name') and set text content separately, ensuring one Q per key-value pair. 2. Moved the logic to reverse segment order (if strand is -1) to occur BEFORE the loop that creates Segment nodes. Removed the unused 'segments' list variable and its subsequent reversal operation.",
+  "corrected_code": "from Bio.SeqFeature import SeqFeature, ExactPosition\nimport xml.etree.ElementTree as ET\n\ndef feature_xml(feature, feature_id, sequence_length):\n    if feature.location is None:\n        raise ValueError(\"Location cannot be None\")\n    if feature.location.strand not in (1, -1):\n        raise ValueError(f\"Strand must be 1 or -1, got {feature.location.strand}\")\n    \n    # Check all parts have same strand and are ExactPosition\n    parts = list(feature.location.parts)\n    if len(parts) == 0:\n        raise ValueError(\"No location parts found\")\n    \n    first_strand = parts[0].strand\n    for part in parts:\n        if part.strand != first_strand:\n            raise ValueError(f\"All parts must have the same strand, got {part.strand}\")\n        if not isinstance(part.start, ExactPosition) or not isinstance(part.end, ExactPosition):\n            raise ValueError(\"Both endpoints must be ExactPosition\")\n        if part.start >= sequence_length or part.end > sequence_length:\n            raise ValueError(f\"Endpoints exceed sequence_length {sequence_length}\")\n        if part.start < 0 or part.end <= part.start:\n            raise ValueError(f\"Invalid range: start={part.start}, end={part.end}\")\n    \n    # Determine directionality\n    directionality = '2' if feature.location.strand == -1 else '1'\n    \n    # Build Feature element\n    feat_elem = ET.Element('Feature')\n    feat_elem.set('id', str(feature_id))\n    label = feature.qualifiers.get('label', [feature.type])[0]\n    feat_elem.set('name', label)\n    feat_elem.set('type', feature.type)\n    feat_elem.set('directionality', directionality)\n    \n    # Process qualifiers\n    for key, value in feature.qualifiers.items():\n        if key == 'label':\n            continue  # Already handled as 'name'\n        if isinstance(value, list):\n            val_list = value\n        else:\n            val_list = [value]\n        for v in val_list:\n            q_elem = ET.SubElement(feat_elem, 'Q', {'name': str(key)})\n            q_elem.text = str(v)\n    \n    # Build Segment nodes (reverse order logic applied BEFORE adding segments if strand is -1)\n    if feature.location.strand == -1:\n        parts.reverse()\n    \n    for part in parts:\n        seg_range = f'{int(part.start)+1}-{int(part.end)}'\n        seg_elem = ET.SubElement(feat_elem, 'Segment')\n        seg_elem.set('range', seg_range)\n        seg_elem.set('type', 'standard')\n        seg_elem.set('color', '#4CAF50')\n    \n    return feat_elem"
+}
+```

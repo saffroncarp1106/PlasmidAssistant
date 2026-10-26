@@ -1,0 +1,40 @@
+Write readable Python source only under50 lines. Implement start_job(root, work, on_success, on_error) with queue.Queue and threading.Thread(daemon=True). Worker thread ONLY calls work then puts (True,result) or (False,exception) in queue. Never calls Tk. Main thread poll uses get_nowait, catches queue.Empty then schedules root.after(50,poll). On result invoke appropriate callback on main thread. Start worker and initial root.after from caller main thread. Return cancel() function that marks cancelled True via nonlocal and cancels pending root.after via after_cancel if id exists, catches tkinter.TclError. poll exits if cancelled. Handle root destroyed by catching TclError on scheduling. Exception handling must use Exception not BaseException. Do not join worker. No external packages. No semicolons.
+RESPONSE
+import threading
+from queue import Queue
+import tkinter as tk
+
+def start_job(root, work, on_success, on_error):
+    q = Queue()
+    cancelled = [False]
+    
+    def worker():
+        try:
+            result = work()
+            q.put((True, result))
+        except Exception as e:
+            q.put((False, e))
+    
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    
+    def poll():
+        if cancelled[0]: return
+        try:
+            success, data = q.get_nowait()
+            if success: on_success(data)
+            else: on_error(data)
+        except Exception: pass
+        
+        try:
+            root.after(50, poll)
+        except tk.TclError:
+            pass
+    
+    def cancel():
+        cancelled[0] = True
+        try: root.after_cancel(poll) if hasattr(root.after, 'cancel') else None
+        except tk.TclError: pass
+    
+    poll()
+    return cancel

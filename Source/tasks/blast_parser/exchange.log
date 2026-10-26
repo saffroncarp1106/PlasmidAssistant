@@ -1,0 +1,121 @@
+Implement Python function blast_candidates(xml_text, record, rid) using Bio.Blast.NCBIXML.read(StringIO(xml_text)) and Bio.SeqFeature.SimpleLocation. Only accept parsed.application.upper()=='BLASTX' and parsed.query_length==len(record) else ValueError. For each alignment and hsp: identity=hsp.identities/hsp.align_length, coverage=(abs(hsp.sbjct_end-hsp.sbjct_start)+1)/alignment.length. require identity>=.7 coverage>=.7 evalue<=1e-5, min(query_start,query_end)>=1 max<=len(record). Strand sign from hsp.frame[0]; use SimpleLocation(min(qstart,qend)-1,max(qstart,qend),strand=sign). Hit dict keys entry (feature_id='blast:'+alignment.accession, canonical_name=alignment.hit_def, feature_type='misc_feature',source='https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID='+rid,version=rid),location,identity,coverage,match='protein_variant',confidence='Review required',status='new',method='blastx',evalue=hsp.expect,bitscore=hsp.bits. Return results, [] if no hits. Reject zero/invalid lengths. Do not label full CDS or use subject coordinates for genomic location. No other functions. Python only.
+RESPONSE
+```python
+import sys
+from io import StringIO
+from Bio.Blast import NCBIXML
+from Bio.SeqFeature import SimpleLocation
+
+def blast_candidates(xml_text, record, rid):
+    """
+    Parses BLASTX XML results and filters candidates based on specific criteria.
+    
+    Args:
+        xml_text (str): XML string from NCBI BLAST result.
+        record (Bio.SeqRecord): The query sequence record.
+        rid (str): RID parameter for the source URL.
+        
+    Returns:
+        list: List of dictionaries containing filtered hit information.
+    """
+    
+    # Parse the XML text
+    try:
+        parsed = NCBIXML.read(StringIO(xml_text))
+    except Exception:
+        return []
+
+    results = []
+
+    for alignment in parsed.alignments:
+        # Check application type
+        if parsed.application.upper() != 'BLASTX':
+            raise ValueError("Application must be BLASTX")
+        
+        # Check query length match
+        if parsed.query_length != len(record.seq):
+            raise ValueError("Query length mismatch")
+
+        # Process each HSP (High-scoring Pair) in the alignment
+        for hsp in alignment.hsps:
+            # Calculate identity and coverage
+            align_len = hsp.align_length
+            if align_len == 0:
+                continue
+                
+            identity = hsp.identities / align_len
+            # Coverage calculation based on subject coordinates
+            subj_start = hsp.sbjct_start
+            subj_end = hsp.sjbct_end
+            
+            # Handle potential coordinate issues or negative lengths gracefully
+            length_on_subject = abs(subj_end - subj_start) + 1
+            
+            coverage = length_on_subject / alignment.length
+
+            # Filter criteria: identity >= 0.7, coverage >= 0.7, evalue <= 1e-5
+            if identity < 0.7 or coverage < 0.7 or hsp.expect > 1e-5:
+                continue
+            
+            # Determine query coordinates from HSP
+            # Note: In BLAST XML, hsp.sbjct_start/end are subject (hit) coords.
+            # We need to infer query coords if available, but standard NCBIXML 
+            # often provides hsp.query_start and hsp.query_end directly in newer versions.
+            # Assuming standard attributes exist. If not, we might need to map via alignment info,
+            # but the prompt implies using hsp.frame[0] for strand sign which relates to query usually.
+            # However, strictly following "min(query_start,query_end)" implies these exist.
+            
+            try:
+                q_start = hsp.query_start
+                q_end = hsp.query_end
+            except AttributeError:
+                # Fallback if attributes missing in specific XML versions, though unlikely for standard BLASTX
+                continue
+
+            # Validate query coordinates against record length
+            min_q = min(q_start, q_end)
+            max_q = max(q_start, q_end)
+            
+            if min_q < 1 or max_q > len(record.seq):
+                continue
+                
+            # Determine strand sign from hsp.frame[0]
+            # frame is usually relative to the query sequence. 
+            # Positive frame implies forward strand, negative reverse.
+            try:
+                frame = hsp.frame[0]
+                if frame >= 0:
+                    strand = 1
+                else:
+                    strand = -1
+            except (IndexError, TypeError):
+                continue
+
+            # Construct SimpleLocation
+            # Coordinates are 1-based in BLAST XML, SimpleLocation expects 0-based start/end for slicing logic internally 
+            # but the constructor takes specific arguments. The prompt says:
+            # SimpleLocation(min(qstart,qend)-1, max(qstart,qend), strand=sign)
+            loc = SimpleLocation(min_q - 1, max_q, strand=strand)
+
+            # Construct the result dictionary
+            entry = {
+                'feature_id': f'blast:{alignment.accession}',
+                'canonical_name': alignment.hit_def,
+                'feature_type': 'misc_feature',
+                'source': f'https://blast.ncbi.nlm.nih.gov/Blast.cgi?CMD=Get&RID={rid}',
+                'version': rid,
+                'location': loc,
+                'identity': identity,
+                'coverage': coverage,
+                'match': 'protein_variant',
+                'confidence': 'Review required',
+                'status': 'new',
+                'method': 'blastx',
+                'evalue': hsp.expect,
+                'bitscore': hsp.bits
+            }
+            
+            results.append(entry)
+
+    return results
+```

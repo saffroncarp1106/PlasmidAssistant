@@ -1,0 +1,15 @@
+### Audit Report
+
+**What Passed**
+*   **Unit Test Suite:** All 52 unit tests executed successfully (`exit_code: 0`, status `OK`).
+*   **Example Protein Check:** The script `check_example_protein.py` ran without errors and identified the candidate `mRFP1` with high identity (1.0) and near-complete coverage (0.996).
+*   **Objective Check Script:** The script `check_objective.py` executed successfully, returning a structured JSON summary containing 10 distinct feature matches (including origins, antibiotic resistance genes, terminators, and protein variants) with associated confidence levels and alignment scores.
+
+**What Failed**
+*   **None.** No commands returned a non-zero exit code or reported an error state in the provided logs.
+
+**What They Do NOT Prove**
+*   **SnapGene GUI Compatibility:** These results do not verify that the tool functions correctly within the SnapGene Graphical User Interface (GUI).
+*   **Independent Accuracy:** Passing unit tests and example checks does not prove the biological or sequence annotation accuracy of the tool against external ground truth; it only proves internal consistency.
+*   **Real-World Robustness:** Success on specific example files (`mRFP1`, `ori`, etc.) does not guarantee correct behavior on novel, complex, or edge-case genomic sequences not included in the test suite.
+*   **GUI Integration Logic:** The logs reflect command-line execution; they provide no evidence that GUI-specific logic (e.g., mouse interactions, UI state management) is functional.

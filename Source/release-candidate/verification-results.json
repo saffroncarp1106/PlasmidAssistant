@@ -1,0 +1,43 @@
+[
+  {
+    "command": [
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      ".",
+      "-p",
+      "test_*.py"
+    ],
+    "exit_code": 0,
+    "output": "...................................\n----------------------------------------------------------------------\nRan 35 tests in 0.287s\n\nOK\n"
+  },
+  {
+    "command": [
+      "check_native_real.py"
+    ],
+    "exit_code": 0,
+    "output": "{\"native_roundtrip_passed\": true, \"source_length\": 34864, \"existing_features\": 12, \"overwrite_refused\": true}\n"
+  },
+  {
+    "command": [
+      "check_candidate.py"
+    ],
+    "exit_code": 0,
+    "output": "{\"original_features\": 12, \"output_features\": 234, \"native_roundtrip\": true, \"limitation\": \"Same-machine smoke check only\"}\n"
+  },
+  {
+    "command": [
+      "check_native_corpus.py"
+    ],
+    "exit_code": 0,
+    "output": "{\"verified_documents\": 30, \"limitation\": \"Native parser round trips only; no GUI or biological validation\"}\n"
+  },
+  {
+    "command": [
+      "check_relocated.py"
+    ],
+    "exit_code": 0,
+    "output": "{\"original_features\": 12, \"output_features\": 234, \"native_roundtrip\": true, \"relocated\": true, \"limitation\": \"Relocated same-machine check with empty PATH; not a clean OS test\"}\n"
+  }
+]

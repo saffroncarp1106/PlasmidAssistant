@@ -1,0 +1,1 @@
+{"output": "translated_segments.py", "context": ["tasks/translated_segments/translated_segments.py"], "prompt": "Return corrected Python only. Critical bugs: start MUST advance to pos+3 after every stop or ambiguous codon; both append conditions MUST require length<=n. Preserve function interface and other behavior."}

@@ -1,0 +1,32 @@
+Write runnable Python diagnostic source only under40lines. import json; Path from pathlib; SeqIO from Bio. orfs=json.loads(Path('objective-analysis.json').read_text())['unknown_orfs']; refs=list(SeqIO.parse('public_references/yeast-proteome.fasta','fasta')). For each orf among first6, query=orf['protein']; qgrams={query[i:i+4] for i in range(len(query)-3)}. For each ref seq=str(ref.seq), shared=len(qgrams & {seq[i:i+4] for i in range(len(seq)-3)}). Rank (shared, ref.id) descending and select top3. Output list dict location,length, candidates list dict id,description,shared_4mers,sequence. Store protein-shortlist.json JSON indent2. Print only locations and candidates id,description,shared counts, no full sequence. Do not infer identities or edit plasmid. Correct imports, no mocks.
+RESPONSE
+import json
+from pathlib import Path
+from Bio import SeqIO
+
+data = json.loads(Path('objective-analysis.json').read_text())['unknown_orfs']
+refs = list(SeqIO.parse('public_references/yeast-proteome.fasta', 'fasta'))
+
+results = []
+for orf in data[:6]:
+    query = orf['protein']
+    qgrams = {query[i:i+4] for i in range(len(query)-3)}
+    best_refs = []
+    for ref in refs:
+        seq = str(ref.seq)
+        shared = len(qgrams & {seq[i:i+4] for i in range(len(seq)-3)})
+        if shared > 0:
+            best_refs.append({'id': ref.id, 'description': ref.description, 'shared_4mers': shared})
+    best_refs.sort(key=lambda x: (-x['shared_4mers'], x['id']))
+    top3 = best_refs[:3]
+    results.append({
+        'location': orf.get('location', 'unknown'),
+        'length': len(query),
+        'candidates': top3
+    })
+
+Path('protein-shortlist.json').write_text(json.dumps(results, indent=2))
+for r in results:
+    print(f"Location: {r['location']}, Length: {r['length']}")
+    for c in r['candidates']:
+        print(f"  ID: {c['id']}, Desc: {c['description']}, Shared: {c['shared_4mers']}")

@@ -1,0 +1,175 @@
+Return source with ONE optimization only: immediately inside 'for entry, strand, query_seq in oriented_entries:' add if any(h['entry'].get('feature_id') == entry.get('feature_id') and h.get('identity') == 1.0 and h.get('coverage') == 1.0 for h in fast_hits): continue. Comment: full-length exact copies already found; this heuristic skips extra partial copies of that same reference. Do not alter other code. This avoids costly weak suggestions for already identified exact references. Source only.
+FILE alignment_candidates.py
+def alignment_candidates(record, entries, fast_hits, minimum_identity=0.8, minimum_coverage=0.5, max_windows=20):
+    """
+    Heuristic: Seeds circular scan windows, aligns best local hits, filters by identity/coverage,
+    suppresses redundant fast hits (same name/strand with high overlap), and deduplicates by feature_id.
+    Limitation: max_windows caps seed search depth for performance; results are partial if coverage < 0.95.
+    """
+    from Bio.Seq import Seq
+    from matching import location
+    from local_alignment import align_best
+    from seed_windows import seed_windows
+
+    sequence = str(record.seq).upper()
+    n = len(sequence)
+    scan = sequence * 2 if record.annotations.get('topology') == 'circular' else sequence
+
+    results = []
+    seen = set()
+
+    oriented_entries = [(entry,strand,query) for entry in entries for strand,query in
+                        ((1,entry['sequence']),(-1,str(Seq(entry['sequence']).reverse_complement())))]
+    for entry, strand, query_seq in oriented_entries:
+        if len(query_seq) < 60:
+            continue
+
+        query_seq = query_seq.upper()
+
+        sensitive = minimum_identity < 0.8
+        for window in seed_windows(scan, query_seq, n, max_windows,
+                                   seed_size=8 if sensitive else 12,
+                                   step=4 if sensitive else 12):
+            left, right = window
+            evidence = align_best(scan[left:right], query_seq)
+            if not evidence:
+                continue
+
+            start = left + evidence['start']
+            length = evidence['end'] - evidence['start']
+
+            if not (0 <= start < n and 0 < length <= n):
+                continue
+
+            identity = evidence.get('identity', 0)
+            coverage = evidence.get('coverage', 0)
+
+            if identity < minimum_identity or coverage < minimum_coverage:
+                continue
+
+            loc = location(start, length, n, strand)
+
+            # Suppress if fast hit matches canonical name, strand, and has >=80% overlap
+            redundant = False
+            for fh in fast_hits:
+                if fh['entry'].get('canonical_name', '').casefold() == entry.get('canonical_name', '').casefold():
+                    if fh['location'].strand == strand:
+                        overlap = len(set(loc) & set(fh['location'])) / min(len(loc), len(fh['location']))
+                        if overlap >= 0.8:
+                            redundant = True
+                            break
+            if redundant:
+                continue
+
+            key = (entry.get('feature_id'), strand, str(loc))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            status = 'new'
+            match_type = 'gapped_variant' if coverage == 1.0 else 'partial'
+            confidence = 'Moderate confidence' if identity >= 0.95 and coverage >= 0.8 else 'Weak evidence'
+
+            results.append({
+                'entry': entry,
+                'location': loc,
+                'identity': identity,
+                'coverage': coverage,
+                'match': match_type,
+                'confidence': confidence,
+                'status': status,
+                'method': 'seeded_local_alignment',
+                'reference_start': evidence['reference_start'] if strand == 1 else len(query_seq) - evidence['reference_end'],
+                'reference_end': evidence['reference_end'] if strand == 1 else len(query_seq) - evidence['reference_start']
+            })
+
+    return results
+
+RESPONSE
+```python
+FILE alignment_candidates.py
+def alignment_candidates(record, entries, fast_hits, minimum_identity=0.8, minimum_coverage=0.5, max_windows=20):
+    """
+    Heuristic: Seeds circular scan windows, aligns best local hits, filters by identity/coverage,
+    suppresses redundant fast hits (same name/strand with high overlap), and deduplicates by feature_id.
+    Limitation: max_windows caps seed search depth for performance; results are partial if coverage < 0.95.
+    """
+    from Bio.Seq import Seq
+    from matching import location
+    from local_alignment import align_best
+    from seed_windows import seed_windows
+
+    sequence = str(record.seq).upper()
+    n = len(sequence)
+    scan = sequence * 2 if record.annotations.get('topology') == 'circular' else sequence
+
+    results = []
+    seen = set()
+
+    oriented_entries = [(entry,strand,query) for entry in entries for strand,query in
+                        ((1,entry['sequence']),(-1,str(Seq(entry['sequence']).reverse_complement())))]
+    for entry, strand, query_seq in oriented_entries:
+        if len(query_seq) < 60:
+            continue
+
+        query_seq = query_seq.upper()
+
+        sensitive = minimum_identity < 0.8
+        for window in seed_windows(scan, query_seq, n, max_windows,
+                                   seed_size=8 if sensitive else 12,
+                                   step=4 if sensitive else 12):
+            left, right = window
+            evidence = align_best(scan[left:right], query_seq)
+            if not evidence:
+                continue
+
+            start = left + evidence['start']
+            length = evidence['end'] - evidence['start']
+
+            if not (0 <= start < n and 0 < length <= n):
+                continue
+
+            identity = evidence.get('identity', 0)
+            coverage = evidence.get('coverage', 0)
+
+            if identity < minimum_identity or coverage < minimum_coverage:
+                continue
+
+            loc = location(start, length, n, strand)
+
+            # Suppress if fast hit matches canonical name, strand, and has >=80% overlap
+            redundant = False
+            for fh in fast_hits:
+                if fh['entry'].get('canonical_name', '').casefold() == entry.get('canonical_name', '').casefold():
+                    if fh['location'].strand == strand:
+                        overlap = len(set(loc) & set(fh['location'])) / min(len(loc), len(fh['location']))
+                        if overlap >= 0.8:
+                            redundant = True
+                            break
+            if redundant:
+                continue
+
+            key = (entry.get('feature_id'), strand, str(loc))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            status = 'new'
+            match_type = 'gapped_variant' if coverage == 1.0 else 'partial'
+            confidence = 'Moderate confidence' if identity >= 0.95 and coverage >= 0.8 else 'Weak evidence'
+
+            results.append({
+                'entry': entry,
+                'location': loc,
+                'identity': identity,
+                'coverage': coverage,
+                'match': match_type,
+                'confidence': confidence,
+                'status': status,
+                'method': 'seeded_local_alignment',
+                'reference_start': evidence['reference_start'] if strand == 1 else len(query_seq) - evidence['reference_end'],
+                'reference_end': evidence['reference_end'] if strand == 1 else len(query_seq) - evidence['reference_start']
+            })
+
+    return results
+```

@@ -1,0 +1,185 @@
+Write source only executable diagnostic script. Imports json,Path,Bio.SeqIO, analysis_service.analyze_record and AnnotationConfig, matching.report. Read Path(r'C:\Users\llkin\Documents\WhoamI plasmid new_DAB.dna') via SeqIO.read(path,'snapgene'). entries=json.loads(Path('expanded-library-optimization.json').read_text(encoding='utf-8')). result=analyze_record(record,entries,AnnotationConfig(alignment_identity=.7)). Output JSON file objective-analysis.json containing existing list feature labels and location, known list report(h) for h in result['known_features'] (ALL incl superseded), orfs list location,length, dna=str(f.extract(record.seq)), protein=str(f.extract(record.seq).translate(to_stop=True)) for unknown_orfs sorted length decreasing. print JSON summary bases,len references, total hit count, largest ORF lengths. Do not change input, do not claim biological identities from language model, do not force7hits. Under40 lines use correct imports.
+FILE objectives-extracted.txt
+PAGE 1
+I  have  given  you  the  plasmid  sequence  and  I  have  revealed  the  largest  ORF  but  I  have  not  
+labeled
+ 
+it.
+ 
+You
+ must  label  this  ORF  and  identify  the  remaining  features  of  this  plasmid.  Promoters,  terminators,  
+open
+ reading  frames,  markers  (antibiotic  and  auxotrophic)  are  all  present.  There  are  a  total  of  7  
+features
+ 
+in
+ this  plasmid  including  the  one  that  I  have  revealed.   
+FILE analysis_service.py
+from dataclasses import dataclass
+from copy import deepcopy
+import matching
+import resolver
+import alignment_candidates
+
+@dataclass
+class AnnotationConfig:
+    minimum_orf: int = 300
+    minimum_identity: float = .95
+    search_partial: bool = True
+    alignment_identity: float = .7
+    alignment_coverage: float = .5
+    max_windows: int = 20
+
+    def validate(self):
+        if self.minimum_orf < 6:
+            raise ValueError("minimum_orf must be at least 6")
+        if self.max_windows < 1:
+            raise ValueError("max_windows must be at least 1")
+        for attr in ["minimum_identity", "alignment_identity", "alignment_coverage"]:
+            val = getattr(self, attr)
+            if not (0 < val <= 1):
+                raise ValueError(f"{attr} must be in (0, 1]")
+
+def analyze_record(record, entries, config=None):
+    if config is None:
+        config = AnnotationConfig()
+    config.validate()
+    
+    from annotate import annotate_sequence
+    preserved, unknown = annotate_sequence(record, config.minimum_orf)
+    hits = matching.match_features(record, entries, config.minimum_identity)
+    
+    if config.search_partial:
+        extended_hits = alignment_candidates.alignment_candidates(
+            record, entries, hits,
+            config.alignment_identity, config.alignment_coverage, config.max_windows
+        )
+        hits.extend(extended_hits)
+    
+    resolved_hits = resolver.resolve_hits(hits)
+    
+    unknown = [orf for orf in unknown if not any(
+        hit['status'] == 'new' and hit['confidence'] == 'High confidence'
+        and hit['location'].strand == orf.location.strand
+        and set(orf.location).issubset(set(hit['location'])) for hit in resolved_hits)]
+    
+    return {
+        "record": preserved,
+        "existing_features": deepcopy(record.features),
+        "known_features": resolved_hits,
+        "unknown_orfs": unknown
+    }
+
+FILE matching.py
+"""Evidence-based feature matching with explicit reference provenance."""
+import json
+from resolver import resolve_hits
+from seed_starts import candidate_starts
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
+
+
+def load_database(path):
+    entries = json.loads(path.read_text(encoding='utf-8'))
+    identifiers = set()
+    for entry in entries:
+        for key in ('feature_id', 'canonical_name', 'feature_type', 'sequence', 'source', 'version'):
+            if not entry.get(key):
+                raise ValueError(f'Missing database field: {key}')
+        entry['sequence'] = entry['sequence'].upper()
+        if set(entry['sequence']) - set('ACGT') or len(entry['sequence']) < 12:
+            raise ValueError('References require at least 12 unambiguous DNA bases')
+        if entry['feature_id'] in identifiers:
+            raise ValueError('Duplicate feature_id')
+        identifiers.add(entry['feature_id'])
+    return entries
+
+
+def location(start, length, n, strand):
+    parts = [SimpleLocation(start, min(start + length, n), strand=strand)]
+    if start + length > n:
+        parts.append(SimpleLocation(0, start + length - n, strand=strand))
+    if strand == -1:
+        parts.reverse()
+    return parts[0] if len(parts) == 1 else CompoundLocation(parts)
+
+
+def match_features(record, entries, minimum_identity=.95):
+    """Exact and ungapped full-length variants; variants require review.
+
+    No indel or partial detection is claimed. Identity is measured over the entire
+    reference. Same-locus competing names are retained for review, never guessed.
+    """
+    sequence = str(record.seq).upper()
+    n = len(sequence)
+    circular = record.annotations.get('topology') == 'circular'
+    scan = sequence * 2 if circular else sequence
+    hits = []
+    for entry in entries:
+        reference = entry['sequence']
+        length = len(reference)
+        if length > n:
+            continue
+        for strand, query in ((1, reference), (-1, str(Seq(reference).reverse_complement()))):
+            for start in candidate_starts(scan, query, minimum_identity, n if circular else n - length + 1):
+                matches = sum(a == b for a, b in zip(scan[start:start + length], query))
+                identity = matches / length
+                if identity < minimum_identity:
+                    continue
+                loc = location(start, length, n, strand)
+                occupied = set(loc)
+                existing = any(f.location is not None and f.type != 'source' and
+                               f.location.strand in (strand, None, 0) and
+                               occupied == set(f.location) for f in record.features)
+                hits.append({'entry': entry, 'location': loc, 'identity': identity,
+                             'coverage': 1.0, 'match': 'exact' if identity == 1 else 'variant',
+                             'confidence': 'High confidence' if identity == 1 else 'Moderate confidence',
+                             'status': 'existing' if existing else 'new'})
+    return resolve_hits(hits)
+
+
+def to_feature(hit):
+    entry = hit['entry']
+    return SeqFeature(hit['location'], type='misc_feature' if hit['match'] == 'partial' else entry['feature_type'], qualifiers={
+        'label': [entry['canonical_name']],
+        'note': [f"{hit['confidence']}; {hit['match']}; identity={hit['identity']:.4f}; coverage={hit['coverage']:.4f}",
+                 f"Reference: {entry['feature_id']} version {entry['version']}; {entry['source']}"]})
+
+
+def report(hit):
+    return {**{k: v for k, v in hit.items() if k not in ('entry', 'location')},
+            'feature_id': hit['entry']['feature_id'], 'name': hit['entry']['canonical_name'],
+            'location': str(hit['location'])}
+
+RESPONSE
+```python
+import json, Path, Bio.SeqIO
+from analysis_service import analyze_record, AnnotationConfig
+from matching import report
+
+path = Path(r'C:\Users\llkin\Documents\WhoamI plasmid new_DAB.dna')
+record = Bio.SeqIO.read(path, 'snapgene')
+entries = json.loads(Path('expanded-library-optimization.json').read_text(encoding='utf-8'))
+result = analyze_record(record, entries, AnnotationConfig(alignment_identity=.7))
+
+output = {
+    "existing_features": [str(f) for f in result['existing_features']],
+    "known_features": [report(h) for h in result['known_features']],
+    "unknown_orfs": sorted(result['unknown_orfs'], key=lambda x: len(x), reverse=True)
+}
+
+for orf in output["unknown_orfs"]:
+    dna = str(orf.extract(record.seq))
+    protein = str(orf.extract(record.seq).translate(to_stop=True))
+    orf.update({"dna": dna, "protein": protein})
+
+with open('objective-analysis.json', 'w') as f:
+    json.dump(output, f)
+
+print(json.dumps({
+    "bases": len(record.seq),
+    "len_references": len(entries),
+    "total_hit_count": len(result['known_features']),
+    "largest_orf_lengths": [len(orf.extract(record.seq)) for orf in output["unknown_orfs"]]
+}))
+```

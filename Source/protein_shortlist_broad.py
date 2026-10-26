@@ -1,0 +1,30 @@
+import json, gzip
+from pathlib import Path
+from Bio import SeqIO
+
+data = json.loads(Path('objective-analysis.json').read_text())['unknown_orfs']
+refs = list(SeqIO.parse(gzip.open('public_references/reviewed-300-700.fasta.gz', 'rt'), 'fasta'))
+
+results = []
+for orf in data[:1]:
+    query = orf['protein']
+    qgrams = {query[i:i+4] for i in range(len(query)-3)}
+    best_refs = []
+    for ref in refs:
+        seq = str(ref.seq)
+        shared = len(qgrams & {seq[i:i+4] for i in range(len(seq)-3)})
+        if shared > 0:
+            best_refs.append({'id': ref.id, 'description': ref.description, 'shared_4mers': shared, 'sequence': seq})
+    best_refs.sort(key=lambda x: (-x['shared_4mers'], x['id']))
+    top3 = best_refs[:3]
+    results.append({
+        'location': orf.get('location', 'unknown'),
+        'length': len(query),
+        'candidates': top3
+    })
+
+Path('protein-shortlist-broad.json').write_text(json.dumps(results, indent=2))
+for r in results:
+    print(f"Location: {r['location']}, Length: {r['length']}")
+    for c in r['candidates']:
+        print(f"  ID: {c['id']}, Desc: {c['description']}, Shared: {c['shared_4mers']}")

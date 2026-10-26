@@ -1,0 +1,1 @@
+**Note:** This script uses Bio.SeqIO with 'generic' format to read .dna files, assuming standard GenBank-like structure or simple DNA formats.

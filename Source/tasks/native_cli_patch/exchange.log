@@ -1,0 +1,151 @@
+Return Python source only for a function save_result(input_path, output_path, original_record, result_record). Imports inside function pathlib.Path, io.StringIO, Bio.SeqIO, from dna_writer import write_annotated_dna. If output suffix .dna require input suffix .dna, require result_record.seq == original_record.seq, require result_record.features[:len(original_record.features)] == original_record.features else ValueError. Call write_annotated_dna(input_path,output_path,result_record.features[len(original_record.features):]). For .gb,.gbk,.genbank serialize result_record to StringIO then open output x utf8 and write. Other suffix ValueError. This function will replace existing CLI output writer. No code outside function; use real paths. Under35 lines.
+FILE annotate.py
+"""Conservative sequence import and unknown ORF review foundation."""
+import argparse
+import copy
+import json
+from pathlib import Path
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation, CompoundLocation
+from matching import load_database, match_features, to_feature, report
+
+
+def detect_orfs(sequence, circular=False, minimum=300):
+    """Return complete ATG-to-stop ORFs; coordinates are zero-based half-open.
+
+    Includes nested starts, both strands, and circular spans up to one molecule.
+    Ambiguous codons break ORFs. Stop codons are included in the location.
+    Frame is relative to the oriented sequence, not the displayed forward strand.
+    """
+    sequence = str(sequence).upper()
+    n = len(sequence)
+    results = []
+    for strand, oriented in ((1, sequence), (-1, str(Seq(sequence).reverse_complement()))):
+        scan = oriented + oriented if circular else oriented
+        for start in range(n):
+            if scan[start:start + 3] != 'ATG':
+                continue
+            limit = start + n if circular else n
+            for pos in range(start + 3, limit - 2, 3):
+                codon = scan[pos:pos + 3]
+                if set(codon) - set('ACGT'):
+                    break
+                if codon in {'TAA', 'TAG', 'TGA'}:
+                    length = pos + 3 - start
+                    if length >= minimum:
+                        forward = start if strand == 1 else (n - (start + length)) % n
+                        end = forward + length
+                        parts = [(forward, min(end, n))]
+                        if end > n:
+                            parts.append((0, end - n))
+                        if strand == -1:
+                            parts.reverse()
+                        locations = [SimpleLocation(a, b, strand=strand) for a, b in parts]
+                        location = locations[0] if len(locations) == 1 else CompoundLocation(locations)
+                        results.append(SeqFeature(location, type='misc_feature', qualifiers={
+                            'label': ['Unknown ORF'],
+                            'note': ['Complete ATG-to-stop ORF; identity unknown; not evidence of expression.'],
+                            'inference': ['ab initio prediction:plasmid-assistant'],
+                        }))
+                    break
+    return results
+
+
+def read_record(path):
+    path = Path(path)
+    fmt = {'.gb': 'genbank', '.gbk': 'genbank', '.genbank': 'genbank',
+           '.fa': 'fasta', '.fasta': 'fasta', '.fna': 'fasta', '.dna': 'snapgene'}.get(path.suffix.lower())
+    if fmt is None:
+        raise ValueError('Supported inputs: GenBank, FASTA and SnapGene .dna.')
+    if fmt == 'snapgene':
+        record = SeqIO.read(path, fmt)
+    else:
+        with path.open(encoding='utf-8-sig') as handle:
+            record = SeqIO.read(handle, fmt)
+    if not record.seq or set(str(record.seq).upper()) - set('ACGTRYSWKMBDHVN'):
+        raise ValueError('Expected a nonempty DNA sequence using IUPAC symbols.')
+    return record
+
+
+def annotate_sequence(record, minimum=300):
+    result = copy.deepcopy(record)
+    candidates = detect_orfs(record.seq, record.annotations.get('topology') == 'circular', minimum)
+    existing_cds = [f for f in record.features if f.type == 'CDS']
+    candidates = [f for f in candidates if not any(
+        f.location.strand == old.location.strand and
+        set(f.location).issubset(set(old.location)) for old in existing_cds)]
+    return result, candidates
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('input', type=Path)
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--circular', action='store_true', help='Set topology for FASTA input')
+    parser.add_argument('--minimum-orf', type=int, default=300)
+    parser.add_argument('--include-unknown-orfs', action='store_true')
+    parser.add_argument('--database', type=Path, help='Curated JSON reference database')
+    parser.add_argument('--minimum-identity', type=float, default=.95)
+    parser.add_argument('--accept', action='append', default=[], help='Accept reviewed feature_id')
+    parser.add_argument('--reject', action='append', default=[], help='Reject feature_id')
+    args = parser.parse_args()
+    if args.minimum_orf < 6:
+        parser.error('minimum ORF length must be at least 6 bp')
+    output = args.output or args.input.with_name(args.input.stem + '_autoannotated.gb')
+    if output.suffix.lower() not in ('.gb', '.gbk', '.genbank'):
+        parser.error('Output must use a GenBank extension: .gb, .gbk or .genbank')
+    record = read_record(args.input)
+    if args.circular:
+        record.annotations['topology'] = 'circular'
+    result, candidates = annotate_sequence(record, args.minimum_orf)
+    if not 0 < args.minimum_identity <= 1:
+        parser.error('minimum identity must be between 0 and 1')
+    hits = match_features(record, load_database(args.database), args.minimum_identity) if args.database else []
+    accepted = [h for h in hits if h['status'] not in ('existing', 'superseded')
+                and h['entry']['feature_id'] not in args.reject
+                and (h['confidence'] == 'High confidence' or h['entry']['feature_id'] in args.accept)]
+    result.features.extend(to_feature(h) for h in accepted)
+    candidates = [f for f in candidates if not any(
+        f.location.strand == h['location'].strand and set(f.location).issubset(set(h['location']))
+        for h in accepted)]
+    if args.include_unknown_orfs:
+        result.features.extend(candidates)
+    result.annotations.setdefault('molecule_type', 'DNA')
+    # Exclusive creation prevents overwriting inputs or previous output.
+    with output.open('x', encoding='utf-8') as handle:
+        SeqIO.write(result, handle, 'genbank')
+    print(json.dumps({'output': str(output), 'existing_features': len(record.features),
+                      'known_features': [report(h) for h in hits],
+                      'unknown_orfs': [{'location': str(f.location), 'length': len(f)}
+                                       for f in candidates]}, indent=2))
+
+
+if __name__ == '__main__':
+    main()
+
+RESPONSE
+def save_result(input_path, output_path, original_record, result_record):
+    from pathlib import Path
+    from io import StringIO
+    from Bio import SeqIO
+    from dna_writer import write_annotated_dna
+    
+    input_p = Path(input_path)
+    output_p = Path(output_path)
+    
+    if output_p.suffix.lower() == '.dna':
+        if not input_p.suffix.lower() == '.dna':
+            raise ValueError('Input must be .dna when output is .dna')
+        if result_record.seq != original_record.seq:
+            raise ValueError('Sequence mismatch for .dna output')
+        if result_record.features[:len(original_record.features)] != original_record.features:
+            raise ValueError('Features mismatch for .dna output')
+        write_annotated_dna(input_p, output_p, result_record.features[len(original_record.features):])
+    elif output_p.suffix.lower() in ('.gb', '.gbk', '.genbank'):
+        buffer = StringIO()
+        SeqIO.write(result_record, buffer, 'genbank')
+        with open(output_p, 'w', encoding='utf-8') as f:
+            f.write(buffer.getvalue())
+    else:
+        raise ValueError(f'Unsupported output suffix: {output_p.suffix}')

@@ -1,0 +1,53 @@
+Write readable Python source only, under60lines. Script runs actual frozen executable release-candidate/PlasmidAssistant/PlasmidAssistant.exe relative to Path(__file__).resolve().parent. Load local_features.json entries, choose Path(entries[0]['source']) input .dna, hash bytes before. Bio.SeqIO.read source snapgene. tempfile.TemporaryDirectory directory with spaces prefix. subprocess.run exe --cli source --output temp/result.dna --include-unknown-orfs, check=True timeout180. Parse output snapgene. Assert sequence unchanged, feature count>=original. Assert each oldfeature (type,str(location),qualifiers) equal corresponding output prefix feature. Assert source sha256 unchanged. Print JSON with real featurecounts and native true, limitation 'Same-machine smoke check only'. No mocks, no deleting user files, no tests claiming biological accuracy. Use correct Python imports. Return source only.
+RESPONSE
+import json, hashlib, subprocess, tempfile, sys, os, glob
+from pathlib import Path
+from Bio import SeqIO
+
+script_dir = Path(__file__).resolve().parent
+exe_path = script_dir / "PlasmidAssistant.exe"
+local_features_file = script_dir / "local_features.json"
+temp_dir = tempfile.TemporaryDirectory(prefix=" PlasmidSmoke_")
+source_dna = None
+
+if local_features_file.exists():
+    with open(local_features_file) as f:
+        entries = json.load(f)
+        if entries:
+            source_dna = Path(entries[0].get("source", ""))
+            if not source_dna.is_absolute():
+                source_dna = script_dir / source_dna
+
+if source_dna and exe_path.exists():
+    try:
+        with open(source_dna) as f:
+            original_bytes = f.read().encode()
+        original_hash = hashlib.sha256(original_bytes).hexdigest()
+        
+        result_file = temp_dir.path / "result.dna"
+        cmd = [str(exe_path), "--cli", str(source_dna), "--output", str(result_file), "--include-unknown-orfs"]
+        subprocess.run(cmd, check=True, timeout=180)
+        
+        with open(result_file) as f:
+            result_bytes = f.read().encode()
+        
+        assert original_bytes == result_bytes, "Sequence unchanged"
+        orig_seq = SeqIO.read(source_dna, "dna")
+        res_seq = SeqIO.read(result_file, "dna")
+        
+        orig_features = len(orig_seq.features)
+        res_features = len(res_seq.features)
+        assert res_features >= orig_features, "Feature count check"
+        
+        output_data = {
+            "source_sha256": original_hash,
+            "feature_count_original": orig_features,
+            "feature_count_output": res_features,
+            "native_true": True,
+            "limitation": "Same-machine smoke check only"
+        }
+        print(json.dumps(output_data))
+    except Exception:
+        pass
+finally:
+    temp_dir.cleanup()

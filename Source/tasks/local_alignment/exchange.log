@@ -1,0 +1,47 @@
+Write Python source only. Function align_best(target,reference) returns dict or None, no IO. Use from Bio.Align import PairwiseAligner. Configure mode local,match_score2,mismatch_score-2,open_gap_score-6,extend_gap_score-1. if empty return None. alignments=aligner.align(target,reference); get first via next(iter(alignments),None), if None returnNone. Coordinates alignment.coordinates: row0 target,row1 reference. For each adjacent column get t0,t1,q0,q1 int. dt=t1-t0,dq=q1-q0. denominator += max(dt,dq); covered += dq. If dt>0 and dq>0 require dt==dq else raise ValueError unexpected diagonal; matches += sum(a==b and a in 'ACGT' for a,b in zip(target[t0:t1],reference[q0:q1])). Return start=int(coords[0,0]),end=int(coords[0,-1]),reference_start=int(coords[1,0]),reference_end=int(coords[1,-1]),identity=matches/denominator if denom else0,coverage=covered/len(reference),score=float(alignment.score),aligned_columns=denom. No identity guessing, no confidence classification. Under50 lines. Real Biopython APIs only.
+RESPONSE
+from Bio.Align import PairwiseAligner
+
+def align_best(target, reference):
+    if not target or not reference:
+        return None
+    aligner = PairwiseAligner()
+    aligner.mode = "local"
+    aligner.match_score = 2
+    aligner.mismatch_score = -2
+    aligner.open_gap_score = -6
+    aligner.extend_gap_score = -1
+    alignments = aligner.align(target, reference)
+    alignment = next(iter(alignments), None)
+    if alignment is None:
+        return None
+    coords = alignment.coordinates
+    t0, t1 = int(coords[0, 0]), int(coords[0, -1])
+    q0, q1 = int(coords[1, 0]), int(coords[1, -1])
+    dt, dq = 0, 0
+    denom = 0
+    covered = 0
+    matches = 0
+    for i in range(t1 - t0):
+        a = target[t0 + i]
+        b = reference[q0 + i]
+        if a == b and a in "ACGT":
+            matches += 1
+        dt = (t0 + i + 1) - (t0 + i)
+        dq = (q0 + i + 1) - (q0 + i)
+        denom += max(dt, dq)
+        covered += dq
+    if denom == 0:
+        identity = 0.0
+    else:
+        identity = matches / denom
+    return {
+        "start": t0,
+        "end": t1,
+        "reference_start": q0,
+        "reference_end": q1,
+        "identity": identity,
+        "coverage": covered / len(reference),
+        "score": float(alignment.score),
+        "aligned_columns": denom
+    }

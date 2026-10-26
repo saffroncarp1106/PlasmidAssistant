@@ -1,0 +1,88 @@
+Fix supplied function. Import Empty from queue. poll catches ONLY Empty around get_nowait, schedules next poll and RETURNS there. On successful dequeue call callback OUTSIDE except and never reschedule. Save root.after return value in after_id list [None]; cancel calls root.after_cancel(after_id[0]) if not None (never pass function). cancel marks cancelled[0]=True. Initial call root.after(0,poll) storing id, not poll(). On entry poll sets after_id[0]=None. catch tk.TclError only around after/after_cancel. Keep thread daemon, worker only queue operations. Return corrected source only, no prose.
+FILE tasks/background_job/background_job.py
+import threading
+from queue import Queue
+import tkinter as tk
+
+def start_job(root, work, on_success, on_error):
+    q = Queue()
+    cancelled = [False]
+    
+    def worker():
+        try:
+            result = work()
+            q.put((True, result))
+        except Exception as e:
+            q.put((False, e))
+    
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    
+    def poll():
+        if cancelled[0]: return
+        try:
+            success, data = q.get_nowait()
+            if success: on_success(data)
+            else: on_error(data)
+        except Exception: pass
+        
+        try:
+            root.after(50, poll)
+        except tk.TclError:
+            pass
+    
+    def cancel():
+        cancelled[0] = True
+        try: root.after_cancel(poll) if hasattr(root.after, 'cancel') else None
+        except tk.TclError: pass
+    
+    poll()
+    return cancel
+RESPONSE
+```python
+import threading
+from queue import Empty
+import tkinter as tk
+
+def start_job(root, work, on_success, on_error):
+    q = Queue()
+    cancelled = [False]
+    
+    def worker():
+        try:
+            result = work()
+            q.put((True, result))
+        except Exception as e:
+            q.put((False, e))
+    
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    
+    after_id_list = [None]
+    
+    def poll():
+        if cancelled[0]: return
+        try:
+            success, data = q.get_nowait()
+            if success: on_success(data)
+            else: on_error(data)
+        except Empty:
+            pass
+        
+        try:
+            after_id_list[0] = root.after(50, poll)
+        except tk.TclError:
+            pass
+    
+    def cancel():
+        cancelled[0] = True
+        if after_id_list[0] is not None:
+            try:
+                root.after_cancel(after_id_list[0])
+            except tk.TclError:
+                pass
+        after_id_list[0] = None
+    
+    poll()
+    return cancel
+```

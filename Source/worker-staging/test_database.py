@@ -1,0 +1,1 @@
+**Note:** Tests are unit-level. Integration tests with actual .dna files would require a test directory populated with valid data.

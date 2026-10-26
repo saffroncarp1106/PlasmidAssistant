@@ -1,0 +1,59 @@
+from dataclasses import dataclass
+from copy import deepcopy
+import matching
+import resolver
+import alignment_candidates
+
+@dataclass
+class AnnotationConfig:
+    minimum_orf: int = 300
+    minimum_identity: float = .95
+    search_partial: bool = True
+    alignment_identity: float = .8
+    alignment_coverage: float = .5
+    max_windows: int = 20
+
+    def validate(self):
+        if self.minimum_orf < 6:
+            raise ValueError("minimum_orf must be at least 6")
+        if self.max_windows < 1:
+            raise ValueError("max_windows must be at least 1")
+        for attr in ["minimum_identity", "alignment_identity", "alignment_coverage"]:
+            val = getattr(self, attr)
+            if not (0 < val <= 1):
+                raise ValueError(f"{attr} must be in (0, 1]")
+
+def analyze_record(record, entries, config=None):
+    if config is None:
+        config = AnnotationConfig()
+    else:
+        config.validate()
+    
+    preserved, unknown = matching.annotate_sequence(record, config.minimum_orf)
+    hits = matching.match_features(record, entries, config.minimum_identity)
+    
+    if config.search_partial:
+        extended_hits = alignment_candidates.alignment_candidates(
+            record, entries, hits,
+            config.alignment_identity, config.alignment_coverage, config.max_windows
+        )
+        hits.extend(extended_hits)
+    
+    resolved_hits = resolver.resolve_hits(hits)
+    
+    filtered_hits = []
+    for hit in resolved_hits:
+        if hit.status == "new" and hit.confidence == "High confidence":
+            if hit.strand == "unknown":
+                continue
+            orf_locations = set(orf.location for orf in unknown)
+            if not orf_locations.issubset(hit.location):
+                continue
+            filtered_hits.append(hit)
+    
+    return {
+        "record": preserved,
+        "existing_features": deepcopy(record.features),
+        "known_features": filtered_hits,
+        "unknown_orfs": unknown
+    }

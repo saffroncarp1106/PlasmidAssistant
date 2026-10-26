@@ -1,0 +1,177 @@
+Write unittest file source only testing real analysis_service.analyze_record using fixture REFERENCE,ENTRY_FIELDS imported from test_alignment_candidates and Bio.Seq SeqRecord. Three tests. 1 partial input REFERENCE[20:110], call analyze_record(record,[ENTRY_FIELDS]), assert any hit match=='partial' and coverage>=.7, assert no returned partial confidence=='High confidence', source record.features remains empty. 2 negative record Seq('N'*1000), analyze same reference, assert known_features==[] and unknown_orfs==[]. 3 invalid config AnnotationConfig(alignment_identity=1.1) with analyze_record raises ValueError. No mocks. Use unittest.TestCase and methods. Under45 lines.
+FILE analysis_service.py
+from dataclasses import dataclass
+from copy import deepcopy
+import matching
+import resolver
+import alignment_candidates
+
+@dataclass
+class AnnotationConfig:
+    minimum_orf: int = 300
+    minimum_identity: float = .95
+    search_partial: bool = True
+    alignment_identity: float = .8
+    alignment_coverage: float = .5
+    max_windows: int = 20
+
+    def validate(self):
+        if self.minimum_orf < 6:
+            raise ValueError("minimum_orf must be at least 6")
+        if self.max_windows < 1:
+            raise ValueError("max_windows must be at least 1")
+        for attr in ["minimum_identity", "alignment_identity", "alignment_coverage"]:
+            val = getattr(self, attr)
+            if not (0 < val <= 1):
+                raise ValueError(f"{attr} must be in (0, 1]")
+
+def analyze_record(record, entries, config=None):
+    if config is None:
+        config = AnnotationConfig()
+    config.validate()
+    
+    from annotate import annotate_sequence
+    preserved, unknown = annotate_sequence(record, config.minimum_orf)
+    hits = matching.match_features(record, entries, config.minimum_identity)
+    
+    if config.search_partial:
+        extended_hits = alignment_candidates.alignment_candidates(
+            record, entries, hits,
+            config.alignment_identity, config.alignment_coverage, config.max_windows
+        )
+        hits.extend(extended_hits)
+    
+    resolved_hits = resolver.resolve_hits(hits)
+    
+    unknown = [orf for orf in unknown if not any(
+        hit['status'] == 'new' and hit['confidence'] == 'High confidence'
+        and hit['location'].strand == orf.location.strand
+        and set(orf.location).issubset(set(hit['location'])) for hit in resolved_hits)]
+    
+    return {
+        "record": preserved,
+        "existing_features": deepcopy(record.features),
+        "known_features": resolved_hits,
+        "unknown_orfs": unknown
+    }
+
+FILE test_alignment_candidates.py
+import random
+import unittest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from alignment_candidates import alignment_candidates
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+
+# Fixture setup
+rng = random.Random(123)
+REFERENCE = ''.join(rng.choice('ACGT') for _ in range(120))
+ENTRY_FIELDS = {
+    'sequence': REFERENCE,
+    'feature_id': 'fixture',
+    'canonical_name': 'Synthetic',
+    'feature_type': 'misc_feature',
+    'source': 'synthetic',
+    'version': '1'
+}
+
+class TestAlignmentCandidates(unittest.TestCase):
+
+    def test_partial_match(self):
+        record = SeqRecord(Seq(REFERENCE[20:110]), id='test_ref')
+        entry = ENTRY_FIELDS.copy()
+        fast_hits = []
+        
+        candidates = sorted(alignment_candidates(record, [entry], fast_hits), key=lambda h: (h['coverage'],h['identity']), reverse=True)
+        
+        self.assertTrue(any(c['match'] == 'partial' for c in candidates))
+        self.assertGreaterEqual(candidates[0]['identity'], 0.75)
+        self.assertEqual(set(candidates[0]['location']), set(range(90)))
+        self.assertNotIn('High confidence', [c['confidence'] for c in candidates])
+
+    def test_insertion_reverse(self):
+        target = REFERENCE[:60] + 'AAA' + REFERENCE[60:]
+        record = SeqRecord(Seq(target).reverse_complement(), id='test_ref_ins')
+        entry = ENTRY_FIELDS.copy()
+        
+        # Create a fast hit to trigger suppression logic if needed, but here we test reverse complement detection
+        fast_hits = []
+        
+        candidates = sorted(alignment_candidates(record, [entry], fast_hits), key=lambda h: (h['coverage'],h['identity']), reverse=True)
+        
+        self.assertTrue(any(c['location'].strand == -1 for c in candidates))
+        self.assertGreaterEqual(candidates[0]['coverage'], 0.95)
+        extracted_seq = SeqFeature(candidates[0]['location']).extract(record.seq).upper()
+        self.assertEqual(extracted_seq, target.upper())
+
+    def test_circular_topology(self):
+        target = REFERENCE[40:] + 'NNNN' + REFERENCE[:40]
+        record = SeqRecord(Seq(target), id='test_ref_circ', annotations={'topology': 'circular'})
+        entry = ENTRY_FIELDS.copy()
+        
+        fast_hits = []
+        candidates = sorted(alignment_candidates(record, [entry], fast_hits), key=lambda h: (h['coverage'],h['identity']), reverse=True)
+        
+        self.assertTrue(any(c['location'].strand == 1 for c in candidates))
+        # Check that location parts cover the circular shift logic implicitly via identity/coverage
+        self.assertGreaterEqual(candidates[0]['identity'], 0.95)
+        extracted_seq = SeqFeature(candidates[0]['location']).extract(record.seq).upper()
+        self.assertEqual(extracted_seq, REFERENCE.upper())
+
+    def test_fast_suppression(self):
+        record = SeqRecord(Seq(REFERENCE), id='test_ref_exact')
+        entry = ENTRY_FIELDS.copy()
+        
+        # Create a fast hit that matches exactly
+        from Bio.SeqFeature import SimpleLocation
+        fast_hit_entry = entry.copy()
+        fast_hit_location = SimpleLocation(0, 120, strand=1)
+        fast_hits = [{'entry': fast_hit_entry, 'location': fast_hit_location}]
+        
+        candidates = sorted(alignment_candidates(record, [entry], fast_hits), key=lambda h: (h['coverage'],h['identity']), reverse=True)
+        
+        # Should not include the forward matching same locus due to suppression
+        self.assertFalse(any(c['location'].strand == 1 for c in candidates))
+
+    def test_no_zero_reverse_incidental(self):
+        record = SeqRecord(Seq(REFERENCE), id='test_ref_normal')
+        entry = ENTRY_FIELDS.copy()
+        
+        fast_hits = []
+        candidates = sorted(alignment_candidates(record, [entry], fast_hits), key=lambda h: (h['coverage'],h['identity']), reverse=True)
+        
+        # Ensure we don't get zero reverse incidental weak hits as a failure condition
+        self.assertGreater(len(candidates), 0)
+
+
+RESPONSE
+```python
+import unittest
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from analysis_service import analyze_record, AnnotationConfig
+from test_alignment_candidates import REFERENCE, ENTRY_FIELDS
+
+class TestAnalyzeRecord(unittest.TestCase):
+    def test_partial_input(self):
+        record = SeqRecord(Seq(REFERENCE[20:110]), id='partial')
+        result = analyze_record(record, [ENTRY_FIELDS])
+        self.assertTrue(any(h['match'] == 'partial' for h in result['known_features']))
+        self.assertGreaterEqual(result['known_features'][0]['coverage'], 0.7)
+        self.assertNotIn('High confidence', [h['confidence'] for h in result['known_features']])
+        self.assertEqual(len(result['existing_features']), 0)
+
+    def test_negative_record(self):
+        record = SeqRecord(Seq('N'*1000), id='noise')
+        result = analyze_record(record, [ENTRY_FIELDS])
+        self.assertEqual(result['known_features'], [])
+        self.assertEqual(result['unknown_orfs'], [])
+
+    def test_invalid_config(self):
+        with self.assertRaises(ValueError):
+            config = AnnotationConfig(alignment_identity=1.1)
+            analyze_record(SeqRecord(Seq('A')), [], config=config)
+
+if __name__ == '__main__':
+    unittest.main()
+```
