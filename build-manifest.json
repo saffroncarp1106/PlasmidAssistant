@@ -1,0 +1,9 @@
+{
+  "release_date": "2026-10-26",
+  "platform": "Windows x64",
+  "python": "3.14.7",
+  "unit_tests_passed": 65,
+  "standalone_native_export_passed": true,
+  "exe_sha256": "d54b1862bfe394c34cf9e32deb91144159ce254f93f95ae43d33676755518d1b",
+  "protein_references_sha256": "b2a57bda0770ce3c8c23aaf036a7c28bf21f831ddbdda3d1cc41d92a70cc636b"
+}

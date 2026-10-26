@@ -9,7 +9,13 @@ import unittest
 class ReferenceLoaderTests(unittest.TestCase):
     def test_real_automatic_reference_discovery(self):
         # Read local_features.json relative to this file
-        source_file = Path(__file__).parent / "local_features.json"
+        import struct
+        from Bio.SeqFeature import SeqFeature, SimpleLocation
+        from packet_writer import append_features_bytes
+        def packet(kind, payload):
+            return bytes([kind]) + struct.pack('>I',len(payload)) + payload
+        raw = packet(9,b'SnapGene'+struct.pack('>HHH',1,1,1))+packet(0,b'\x01'+b'ACGT'*30)
+        raw = append_features_bytes(raw,[SeqFeature(SimpleLocation(0,120,strand=1),type='rep_origin',qualifiers={'label':['ori']})])
         
         with tempfile.TemporaryDirectory() as tmp_dir:
             install_path = Path(tmp_dir)
@@ -21,8 +27,7 @@ class ReferenceLoaderTests(unittest.TestCase):
             companion_dir.mkdir()
             
             # Copy source file to Plasmids/example.dna (simulating the expected location)
-            source = Path(json.loads(source_file.read_text())[0]['source'])
-            shutil.copyfile(source, plasmids_dir / 'example.dna')
+            (plasmids_dir/'example.dna').write_bytes(raw)
             
             # Call load_references with a non-existent local_features.json in Companion
             result = load_references(companion_dir / "local_features.json")
@@ -54,3 +59,8 @@ class ReferenceLoaderTests(unittest.TestCase):
                 assert False, "Should have raised FileNotFoundError"
             except FileNotFoundError:
                 pass # Expected behavior
+
+    def test_no_installation_allows_protein_only_search(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder, patch.dict('os.environ', {'SNAPGENE_HOME':''}):
+            self.assertEqual(load_references(Path(folder)/'App'/'local_features.json'), [])

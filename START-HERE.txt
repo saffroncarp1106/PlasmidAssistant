@@ -1,8 +1,12 @@
-Plasmid Annotation source stuff
-Command line:
-  PlasmidAssistant.exe --cli input.dna --output annotated.dna
-  PlasmidAssistant.exe --cli input.fasta --circular --output annotated.gb
+PlasmidAssistant — Windows x64
 
-Dependencies: Python 3.14.7, Biopython 1.88, NumPy 2.5.4, Tcl/Tk, and the
-PyInstaller 6.22.3 bootloader. License notices are in licenses and the NumPy
-metadata licenses under _internal. No affiliation with SnapGene is claimed.
+Keep PlasmidAssistant.exe, _internal, and protein_features.json together.
+Run the executable; no Python or Ollama installation is needed.
+Open a sequence > Find missing features > review/toggle suggestions > Save annotated copy.
+Double-click a candidate to read its evidence. Open the saved copy in SnapGene.
+
+The small bundled protein library works standalone. For DNA reference coverage,
+place this folder inside a SnapGene installation with Plasmids/sampleData folders.
+Online NCBI BLASTx is optional and asks before uploading your DNA.
+Promoters and unknown genes are not guaranteed to be identified.
+Delete this folder to uninstall. See README.md for details and limitations.

@@ -235,6 +235,8 @@ class App:
             self.add_row(candidate, 'Unknown ORF', 'Identity unknown')
         self.filter_unknown()
         self.status.set(f'Review ready: {len(self.row_to_feature) - len(candidates)} known candidates; {len(candidates)} unknown ORFs hidden unless enabled. Save creates a new copy.')
+        if result.get('dna_reference_count') == 0:
+            self.status.set(self.status.get() + ' Protein references only: no installed DNA examples found. Promoter/origin coverage is limited.')
 
     def on_select(self, event=None):
         for row in self.tree.selection():

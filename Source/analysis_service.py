@@ -59,6 +59,7 @@ def analyze_record(record, entries, config=None):
     
     return {
         "record": preserved,
+        "dna_reference_count": len(entries),
         "existing_features": deepcopy(record.features),
         "known_features": resolved_hits,
         "unknown_orfs": unknown

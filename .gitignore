@@ -1,0 +1,9 @@
+Source/__pycache__/
+Source/tasks/
+Source/build*/
+Source/*.prof
+Source/blast-live-*
+dist/
+.release-work/
+release-verification.json
+release-verification-review.txt
